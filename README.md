@@ -1,3 +1,5 @@
-# Adaptive-Linguistic-Sanitization-and-Anonymization-ALSA-
+Adaptive Linguistic Sanitization and Anonymization (ALSA)
 
-update track test.
+
+
+# Full code will be updated soon.
