@@ -4,4 +4,3 @@
 
 The ALSA framework comprises four modules, which integrate the results of Privacy Leakage Risk Assessment, Contextual Information Importance Assessment, and Task Relevance Assessment into Clustering and Action Selection. This process then generates a privacy-preserved prompt for a cloud-based black-box LLM to execute.
 
-# Full code will be updated soon.
