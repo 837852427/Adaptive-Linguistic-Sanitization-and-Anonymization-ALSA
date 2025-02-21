@@ -1,162 +1,174 @@
-import torch
-import torch.nn.functional as F
 import re
-import math
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
-class TRSCalculator:
-    """
-    Class to compute the Privacy Leakage Risk Score (PLRS) for text.
-    """
-    def __init__(self, model, tokenizer):
-        self.model = model
-        self.tokenizer = tokenizer
+import spacy
+import pandas as pd
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    def calculate_trs(self, text, task_prompt, k=5):
-        """
-        Calculate average task relevance by running generate_response k times.
-        """
-        relevance_aggregator = {}
-        for _ in range(k):
-            assistant_response = self.generate_task_relevance_response(text, task_prompt)
-            task_relevance = self.extract_task_relevance(assistant_response)
-            for word, relevance in task_relevance.items():
-                relevance_aggregator.setdefault(word, []).append(relevance)
+class TRSCalculate:
+    def __init__(self, bert_model="bert-base-uncased", llm_model="gpt2"):
+        """初始化与CIIS相同配置的分词组件"""
+        self.nlp = spacy.load("en_core_web_sm")
+        self.bert_tokenizer = AutoTokenizer.from_pretrained(bert_model)
+        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
+        self.llm_model = AutoModelForCausalLM.from_pretrained(llm_model)
+        self.llm_tokenizer.pad_token = self.llm_tokenizer.eos_token
 
-        # print the relevance_aggregator
-        print("Relevance Aggregator:\n", relevance_aggregator)
+    def calculate(self, csv_path, k=5):
+        """
+        主计算接口，参照CIIS的calculate设计
+        """
+        print("\033[1mInput sentences\033[0m")
+        sentences, task_prompts = self.input_sentence(csv_path)
+        print("\033[1mInput sentences completed\033[0m")
+
+        trs_scores = {}
+        print("\033[1mCalculating TRS...\033[0m")
+        for sentence, task in zip(sentences, task_prompts):
+            sentence_scores = self.calculate_TRS(sentence, task, k)
+            trs_scores[sentence] = sentence_scores
+        print("\033[1mCalculating TRS completed\033[0m")
+        return trs_scores
+
+    def calculate_TRS(self, sentence, task_prompt, k=5):
+        """
+        参照CIIS的calculate_CIIS设计的单句计算函数
+        """
+        print(f'\nsentence: {sentence}')
+
+        # 获取与CIIS完全一致的token列表
+        words = self.get_ciis_tokens(sentence)
         
-        average_task_relevance = {
-            word: round(sum(relevances) / len(relevances), 2)
-            for word, relevances in relevance_aggregator.items()
-        }
-        # print("TR:\n",average_task_relevance)
-        return average_task_relevance
+        # 多轮评估聚合
+        relevance_agg = {word: [] for word in words}
+        for _ in range(k):
+            response = self.generate_evaluation(sentence, task_prompt, words)
+            self.parse_response(response, relevance_agg)
+        
+        print(f'\nresponse:\n{response}')
+        print(f'\nrelevance_agg:\n{relevance_agg}')
 
-    def generate_task_relevance_response(self, text, task_prompt):
+        # 计算平均分
+        return {word: sum(scores) / len(scores) if scores else 0.0 
+                for word, scores in relevance_agg.items()}
+
+    def input_sentence(self, csv_path):
         """
-        Generate the assistant's response for task relevance.
+        完全参照CIIS的input_sentence设计
         """
-        prompt = f"""
-I have the following text:
+        df = pd.read_csv(csv_path)
+        assert {'sentence','task_prompt'}.issubset(df.columns), \
+            "CSV文件必须包含'sentence'和'task_prompt'列"
+        return df['sentence'].tolist(), df['task_prompt'].tolist()
 
-{text}
-
-And it is within the task:
-
-{task_prompt}
-
-Please evaluate the task relevance of each word phrase (word group) w_i in the text based on the task above:
-
-Instructions:
-
-- For each word w_i in the text, compute its task relevance T(w_i) on a scale from 0.00 to 1.00, where:
-  - 0.00 means the word is irrelevant to the task.
-  - 1.00 means the word is highly relevant to the task.
-- Ensure that the most accurate and likely task relevance is computed for each word or phrase, considering context and meaning.
-- Ensure that named entities (e.g., person names, place names, organization names, specialized phrases, etc.) are kept as a whole with the same task relevance.
-- Present the results with the task relevance value for each word or phrase rounded to at least two decimal places.
-
-Example:
-
-text: John applied for a loan using his credit card.
-task output:
-1. applied for: 0.82
-2. loan: 0.93
-3. credit card: 0.88
-...
-"""
-        conversation_history = [("user", prompt)]
-        assistant_response = self.generate_response(conversation_history)
-        # print("Assistant Response:\n", assistant_response)
-        return assistant_response
-
-    def extract_task_relevance(self, assistant_response):
+    def get_ciis_tokens(self, sentence):
         """
-        Extract task relevance T(w_i) from the assistant's response.
-        Supports various formats, such as:
-        - 1. Word: 0.75 - explanation text
-        - 1. "Word Phrase" - Task relevance: 0.85
-        - 1. Word - Task relevance: 0.75 (explanation)
+        实现与CIIS完全相同的token获取逻辑
         """
-        # print("Assistant Response:")
-        # print(assistant_response)
-        # Regular expression pattern to match different formats
-        pattern = r'^\d+\.\s*(?:"([^"]+)"|([\w\s\.\'\-]+?))\s*(?:-|:)\s*(?:Task relevance:)?\s*([\d\.]+)'
-        matches = re.findall(pattern, assistant_response, re.MULTILINE)
+        # 阶段1：Spacy处理
+        doc = self.nlp(sentence)
+        pos_tags = []
+        for token in doc:
+            if token.is_space or token.pos_ == 'PUNCT':
+                continue
+            if token.text.strip() == '-' and pos_tags:
+                pos_tags[-1] = (pos_tags[-1][0] + token.text, pos_tags[-1][1])
+                continue
+            cleaned_text = token.text.strip()
+            if cleaned_text:
+                pos_tags.append((cleaned_text, token.pos_))
 
-        task_relevance = {}
-        if matches:
-            try:
-                for match in matches:
-                    word = match[0] or match[1]
-                    word = word.strip()
-                    relevance = float(match[2])
-                    task_relevance[word] = relevance
-            except ValueError:
-                print("Failed to convert task relevance values to float.")
-        else:
-            print("Task relevance data not found in assistant response.")
+        # 阶段2：BERT子词合并
+        merged_words = []
+        for word, _ in pos_tags:
+            subwords = self.bert_tokenizer.tokenize(word)
+            merged = self.merge_subwords(subwords)
+            merged_words.append(merged)
+            
+        return merged_words
 
-        return task_relevance
-    
-    def generate_response(self, conversation_history):
+    def merge_subwords(self, subwords):
         """
-        Generate the assistant's reply based on the conversation history.
+        精确复制CIIS的子词合并逻辑
         """
-        prompt = self.format_conversation(conversation_history)
+        if not subwords:
+            return ""
+        merged = subwords[0].replace("##", "")
+        for sw in subwords[1:]:
+            if sw.startswith("##"):
+                merged += sw[2:]
+            else:
+                merged += " " + sw
+        return merged.strip()
 
-        # Tokenize the prompt
-        inputs = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=1024)
+    def generate_evaluation(self, text, task, target_words):
+        """
+        参照CIIS的generate_response设计的prompt生成
+        """
+        prompt = f"""Evaluate task relevance of specific terms:
+Text: {text}
+Task: {task}
 
-        # Check if the tokenized input exceeds the model's max length (1024 tokens for GPT-2)
-        if inputs["input_ids"].size(1) > 1024:
-            # If the length exceeds, truncate the tokens to the first 1024 tokens
-            inputs["input_ids"] = inputs["input_ids"][:, :1024]
-            inputs["attention_mask"] = inputs["attention_mask"][:, :1024]
+Scoring rules:
+1. Score format: "term":X.X (X.X ranges 0.0-1.0, allows decimals like 0.5, 0.75, 0.833)
+2. Strictly maintain original casing (e.g. 'iPhone' must stay as 'iPhone')
+3. Must include all terms: {", ".join(target_words)}
 
-        # Ensure the model input is within the valid token length
-        inputs = inputs.to(self.model.device)  # Move to the correct device (e.g., GPU)
+Examples:
+"Credit":0.8
+"Bank":0.92
+"Loan":0.6667
 
-        # Generate response from the model
-        outputs = self.model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            max_new_tokens=100,  # Adjust max_new_tokens to limit the output length
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            top_k=50,
-            eos_token_id=self.tokenizer.eos_token_id,
-            pad_token_id=self.tokenizer.pad_token_id,
+Output:\n"""
+        inputs = self.llm_tokenizer(prompt, 
+                                  return_tensors="pt", 
+                                  max_length=1024,
+                                  truncation=True)
+        outputs = self.llm_model.generate(
+            inputs.input_ids.to(self.llm_model.device),
+            max_new_tokens=200,
+            temperature=0.3,
+            do_sample=True
         )
+        return self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-        # Decode the response (excluding the prompt part)
-        generated_text = self.tokenizer.decode(outputs[0][inputs['input_ids'].size(1):], skip_special_tokens=True)
-
-        return generated_text.strip()
-
-
-    def format_conversation(self, conversation_history):
+    def parse_response(self, response, result_dict):
         """
-        Format the conversation history to build the model input.
+        参照CIIS的解析逻辑设计
         """
-        prompt = ""
-        for i, (speaker, text) in enumerate(conversation_history):
-            if speaker == "user":
-                prompt += f"<s>[INST] {text.strip()} [/INST]"
-            elif speaker == "assistant":
-                prompt += f" {text.strip()}"
-        return prompt
+        pattern = r'"([^"]+)"\s*:\s*((?:1\.0*|0?\.\d+))'
+        matches = re.findall(pattern, response)
+        
+        # 调试日志
+        # print(f"[DEBUG] 匹配结果: {matches}")
+
+        original_lower_map = {word.lower(): word for word in result_dict.keys()}
+    
+        for response_word, score in matches:
+            # 通过小写匹配找到原始词
+            lower_word = response_word.lower()
+            if lower_word in original_lower_map:
+                original_word = original_lower_map[lower_word]
+                try:
+                    result_dict[original_word].append(float(score))
+                except ValueError:
+                    continue
 
 if __name__ == "__main__":
-    model_name = "gpt2"
-    model = GPT2LMHeadModel.from_pretrained(model_name)
-    tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    # 添加以下两行设置pad_token
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
-    trs_calculator = TRSCalculator(model, tokenizer)
-    text = "John applied for a loan using his credit card."
-    task_prompt = "Identify the key terms in the text."
-    trs = trs_calculator.calculate_trs(text, task_prompt)
-    print(trs)
+    # 测试用例（参照CIIS的main设计）
+    trs_calc = TRSCalculate(llm_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    
+    # 创建测试CSV
+    test_data = {
+        "sentence": ["John applied for a loan using his credit card."],
+        "task_prompt": ["Identify financial-related word"]
+    }
+    pd.DataFrame(test_data).to_csv("test_trs.csv", index=False)
+    
+    # 执行计算
+    results = trs_calc.calculate("test_trs.csv")
+    
+    # 验证输出格式
+    print("\n\033[1mTRS Scores:\033[0m")
+    for sentence, scores in results.items():
+        print(f"Sentence: {sentence}")
+        for word, score in scores.items():
+            print(f"  {word}: {score}")
