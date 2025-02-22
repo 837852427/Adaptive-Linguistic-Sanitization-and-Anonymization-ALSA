@@ -88,4 +88,4 @@ if __name__ == "__main__":
     ciis_calculator = CIISCalculator(model, tokenizer)
     csv_path = "D:/论文/ALSA/test.csv"
     ciis_scores = ciis_calculator.calculate(csv_path)
-    print("CIIS score:\n", ciis_scores)
+    print("CIIS scores:\n", ciis_scores)
