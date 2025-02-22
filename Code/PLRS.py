@@ -30,7 +30,7 @@ selected_words = random.sample(vocab, 500)
 # 2. BERT Embedding Extraction 
 # =============================
 # Load pre-trained BERT model and tokenizer (using local model path)
-model_path = "/root/autodl-tmp/bert-base-uncased"
+model_path = "bert-base-uncased"
 tokenizer = BertTokenizer.from_pretrained(model_path)
 model = BertModel.from_pretrained(model_path)
 model.eval()  # Set to evaluation mode
@@ -152,14 +152,28 @@ def compute_outlier_score(avg_depth, sample_size):
     c_val = c(sample_size)
     return 0.0 if c_val == 0 else 2 ** (-avg_depth / c_val)
 
+class PLRSCalculator:
+    def __init__(self):
+        pass
+    
+    def calculate(self):
+
+        print('\n\033[1mCalculating PLRS Metrics\033[0m')
+
+        PLRS_metrics = {}
+
+        print('\033[1;32mPLRS Completed\033[0m')
+        return PLRS_metrics
+
 # =============================
 # 4. Execution & Output
 # =============================
-trees = build_isolation_forest(X, num_trees=8, sample_size=256)
+if __name__ == "__main__":
+    trees = build_isolation_forest(X, num_trees=8, sample_size=256)
 
-print("Word\tOutlier Score (OS)")
-for i, word in enumerate(selected_words):
-    x = X[i]
-    avg_depth = compute_average_depth(x, trees)
-    os_w = compute_outlier_score(avg_depth, sample_size=256)
-    print(f"{word}\t{os_w:.4f}")
+    print("Word\tOutlier Score (OS)")
+    for i, word in enumerate(selected_words):
+        x = X[i]
+        avg_depth = compute_average_depth(x, trees)
+        os_w = compute_outlier_score(avg_depth, sample_size=256)
+        print(f"{word}\t{os_w:.4f}")

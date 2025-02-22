@@ -1,11 +1,12 @@
 import re
 import spacy
 import pandas as pd
+import inflect
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 class TRSCalculator:
     def __init__(self, bert_model="bert-base-uncased", llm_model="gpt2"):
-        """Initialize tokenization components with same configuration as CIIS"""
+        """Initialize tokenization components with same configuration as TRS"""
         self.nlp = spacy.load("en_core_web_sm")
         self.bert_tokenizer = AutoTokenizer.from_pretrained(bert_model)
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
@@ -14,23 +15,31 @@ class TRSCalculator:
 
     def calculate(self, csv_path, k=5):
         """
-        Main calculation interface following CIIS's design
+        Main calculation interface following TRS's design
         """
-        print("\033[1mInput sentences\033[0m")
+        print('\n\033[1;32mTRS module startup...\033[0m')
+        print("\n\033[1mInput sentences\033[0m")
+
         sentences, task_prompts = self.input_sentence(csv_path)
-        print("\033[1mInput sentences completed\033[0m")
+
+        print("\n\033[1mInput sentences completed\033[0m")
 
         trs_scores = {}
-        print("\033[1mCalculating TRS...\033[0m")
+        print("\n\033[1mCalculating TRS...\033[0m")
+
         for sentence, task in zip(sentences, task_prompts):
-            sentence_scores = self.calculate_TRS(sentence, task, k)
-            trs_scores[sentence] = sentence_scores
-        print("\033[1mCalculating TRS completed\033[0m")
+            word_scores = self.calculate_TRS(sentence, task, k)
+            for word, score in word_scores.items():
+                trs_scores[word] = score
+                
+        print("\n\033[1mCalculating TRS completed\033[0m")
+        print('\n\033[1;32mThe TRS module calculation has been completed.\033[0m')
+
         return trs_scores
 
     def calculate_TRS(self, sentence, task_prompt, k=5):
         """
-        Single sentence calculation following CIIS's pattern
+        Single sentence calculation following TRS's pattern
         """
         print(f'\nsentence: {sentence}')
 
@@ -40,6 +49,7 @@ class TRSCalculator:
         # Multi-round evaluation aggregation
         relevance_agg = {word: [] for word in words}
         for _ in range(k):
+            print(f'\033[1mThe {inflect.engine().ordinal(_ + 1)} iteration\033[0m')
             response = self.generate_evaluation(sentence, task_prompt, words)
             self.parse_response(response, relevance_agg)
         
@@ -168,7 +178,4 @@ if __name__ == "__main__":
     
     # Validate output format
     print("\n\033[1mTRS Scores:\033[0m")
-    for sentence, scores in results.items():
-        print(f"Sentence: {sentence}")
-        for word, score in scores.items():
-            print(f"  {word}: {score}")
+    print(f'\nTRS scores:\n{results}')

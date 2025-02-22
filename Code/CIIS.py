@@ -22,20 +22,24 @@ class CIISCalculator:
         """
         Calculate the CIIS scores for each word in a sentence.
         """
+        print('\n\033[1;32mCIIS module startup...\033[0m')
+        print("\n\033[1mInput sentences\033[0m")
 
-        print("\033[1mInput sentences\033[0m")
         sentences = self.input_sentence(csv_path)
-        print("\033[1mInput sentences completed\033[0m")
+
+        print("\n\033[1mInput sentences completed\033[0m")
 
         ciis_scores = {}
 
         # Calculate the CIIS scores for each sentence and merge them
-        print("\033[1mCalculating CIIS...\033[0m")
+        print("\n\033[1mCalculating CIIS...\033[0m")
         for sentence in sentences:
             ciis_scores_sentence = self.calculate_CIIS(sentence)
             ciis_scores.update(ciis_scores_sentence)
-        print("\033[1mCalculating CIIS completed\033[0m")
+        print("\n\033[1mCalculating CIIS completed\033[0m")
 
+
+        print('\n\033[1;32mThe CIIS module calculation has been completed.\033[0m')
         return ciis_scores
 
     def calculate_CIIS(self, sentence):
@@ -88,4 +92,4 @@ if __name__ == "__main__":
     ciis_calculator = CIISCalculator(model, tokenizer)
     csv_path = "D:/论文/ALSA/test.csv"
     ciis_scores = ciis_calculator.calculate(csv_path)
-    print("CIIS scores:\n", ciis_scores)
+    print("CIIS score:\n", ciis_scores)

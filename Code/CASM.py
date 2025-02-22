@@ -23,7 +23,7 @@ class CASMCalculator:
         self.llm_model = llm_model
         self.llm = pipeline("text-generation", model=llm_model)
 
-    def calculate_casm(self, word_metrics):
+    def calculate(self, word_metrics):
         """
         Calculate CASM actions for each word
         :param word_metrics: Dictionary of word metrics (PLRS, CIIS, TRS)
