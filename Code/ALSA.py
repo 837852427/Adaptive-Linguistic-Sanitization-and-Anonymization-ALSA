@@ -2,9 +2,8 @@ import PLRS
 import CIIS
 import TRS
 import CASM
-import spacy
-import torch
-import numpy as np
+import pandas as pd
+import re
 import pandas as pd
 from transformers import BertModel, BertTokenizer
 
@@ -30,7 +29,8 @@ class ALSA:
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
         triple_metrics = self.calculate_part1()
-        self.calculate_part2(triple_metrics)
+        replacement_dict = self.calculate_part2(triple_metrics)
+        self.calculate_part3(replacement_dict, self.csv_path)
 
     def calculate_part1(self):
         """Execute first stage metrics calculation"""
@@ -80,12 +80,48 @@ class ALSA:
     
     def calculate_part2(self, triple_metrics):
         """Execute second stage action determination"""
-        print('\n\033[1;32mStarting Part 2 Calculations\033[0m')
+        print('\n\033[1;32mStarting Part 2 Calculations...\033[0m')
 
         words_metrics = self.CASM.calculate(triple_metrics)
         print(f'\nwords_metrics:\n{words_metrics}')
 
         print('\n\033[1;32mPart 2 Completed\033[0m')
+        return words_metrics
+
+    def calculate_part3(self, part2_output, csv_path):
+        """
+        Execute text replacement and save to output.csv
+        :param part2_output: Dictionary from part2 {word: replacement}
+        :param csv_path: Path to original CSV file
+        """
+        print('\n\033[1;32mStarting Part 3...\033[0m')
+        # Read original CSV
+        df = pd.read_csv(csv_path)
+        
+        # Create replacement patterns (handle word boundaries)
+        sorted_words = sorted(part2_output.keys(), 
+                            key=lambda x: len(x), 
+                            reverse=True)
+        
+        patterns = {
+            word: re.compile(r'\b{}\b'.format(re.escape(word)))
+            for word in sorted_words
+        }
+
+        # Process each sentence
+        for index in df.index:
+            original = df.at[index, 'sentence']
+            modified = original
+            
+            # Apply replacements in descending length order
+            for word in sorted_words:
+                modified = patterns[word].sub(part2_output[word], modified)
+            
+            df.at[index, 'sentence'] = modified
+
+        # Save with original structure
+        df.to_csv('output.csv', index=False)
+        print("\033[1;32mPart3 completed. Saved to output.csv\033[0m")
 
 if __name__ == "__main__":
     # Initialize components
