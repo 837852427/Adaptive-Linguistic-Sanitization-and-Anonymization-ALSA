@@ -2,6 +2,7 @@ import spacy
 import torch
 import numpy as np
 import pandas as pd
+from transformers import BertModel, BertTokenizer
 
 class CCCalculator:
     def __init__(self, model, tokenizer, alpha=0.5, beta=0.5, gamma=0.3, spacy_model="en_core_web_sm"):
@@ -172,7 +173,7 @@ def input_sentence(csv_path):
     
 if __name__ == "__main__":
     # Example usage
-    from transformers import BertModel, BertTokenizer
+    
     model = BertModel.from_pretrained("bert-base-uncased")
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     cc_calculator = CCCalculator(model, tokenizer)

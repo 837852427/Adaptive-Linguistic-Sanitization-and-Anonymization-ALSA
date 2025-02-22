@@ -1,9 +1,10 @@
+# TRS.py
 import re
 import spacy
 import pandas as pd
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-class TRSCalculate:
+class TRSCalculator:
     def __init__(self, bert_model="bert-base-uncased", llm_model="gpt2"):
         """初始化与CIIS相同配置的分词组件"""
         self.nlp = spacy.load("en_core_web_sm")
@@ -154,7 +155,7 @@ Output:\n"""
 
 if __name__ == "__main__":
     # 测试用例（参照CIIS的main设计）
-    trs_calc = TRSCalculate(llm_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    trs_calc = TRSCalculator(llm_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
     
     # 创建测试CSV
     test_data = {

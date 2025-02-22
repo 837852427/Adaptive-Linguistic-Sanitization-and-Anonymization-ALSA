@@ -15,14 +15,14 @@ import warnings
 warnings.filterwarnings('ignore') 
 
 class CASMCalculator:
-    def __init__(self, k=8, model_name="gpt2"):
+    def __init__(self, k=8, llm_model="gpt2"):
         """
         Initialize the CASM calculator.
         :param k: Number of clusters for k-means.
         """
         self.k = k
-        self.model_name = model_name
-        self.llm = pipeline("text-generation", model=model_name)
+        self.llm_model = llm_model
+        self.llm = pipeline("text-generation", model=llm_model)
 
     def calculate_casm(self, word_metrics):
         """
