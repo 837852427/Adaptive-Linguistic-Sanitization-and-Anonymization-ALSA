@@ -209,6 +209,6 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     sd_calculator = SDCalculator(model, tokenizer)
 
-    sentence = "Unions representing workers at Turner Newall say they are 'disappointed' after talks with stricken parent firm Federal Mogul."
+    sentence = "Unions representing workers at Turner Newall say they are 'disappointed' after talking with stricken parent firm Federal Mogul."
     sd_scores = sd_calculator.calculate_sd(sentence)
     print(sd_scores)

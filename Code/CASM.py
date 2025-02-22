@@ -215,7 +215,7 @@ if __name__ == "__main__":
         "dog": [0.0, 0.0, 0.0],
         "clear": [0.18, 0.8, 0.8],
         "crazy": [0.9, 0.29, 0.9],
-        "beautiful": [0.7, 0.7, 0.677]
+        "beauty": [0.7, 0.7, 0.677]
     }
 
     casm_calculator = CASMCalculator(k=2, model_name="distilgpt2")

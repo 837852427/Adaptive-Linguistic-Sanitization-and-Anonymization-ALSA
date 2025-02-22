@@ -159,7 +159,7 @@ if __name__ == "__main__":
     
     # 创建测试CSV
     test_data = {
-        "sentence": ["John applied for a loan using his credit card."],
+        "sentence": ["Jon applied for a loan using his credit card."],
         "task_prompt": ["Identify financial-related word"]
     }
     pd.DataFrame(test_data).to_csv("test_trs.csv", index=False)

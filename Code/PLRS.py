@@ -26,7 +26,7 @@ class PLRSCalculator:
 # Example usage
 if __name__ == "__main__":
     calculator = PLRSCalculator()
-    sentence = "Your example sentence goes here."
+    sentence = "Your example sentences go here."
     plrs_scores = calculator.calculate_plrs(sentence)
     
     print(f'plrs_scores: {plrs_scores}')

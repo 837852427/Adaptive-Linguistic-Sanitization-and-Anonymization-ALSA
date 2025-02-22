@@ -181,5 +181,5 @@ if __name__ == "__main__":
     sentence = input_sentence("D:/论文/ALSA/test.csv")
     
     cc_scores = cc_calculator.calculate_cc(sentence[0])
-    print("Contextual Coherence scores:\n", cc_scores)
+    print("CC scores:\n", cc_scores)
     print(f'cc_scores.shape: {len(cc_scores)}')
