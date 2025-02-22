@@ -18,17 +18,17 @@ class SDCalculator:
         if len(words) == 0:
             return {}
 
-        # 获取原始token位置映射
+        # Obtain original token position mapping
         original_token_map = self.get_token_positions(sentence, words)
         
         sd_scores = {}
         
         for i, word in enumerate(words):
-            candidate_synonyms = self.get_valid_synonyms(word)  # 过滤有效同义词
+            candidate_synonyms = self.get_valid_synonyms(word)  # Filter valid synonyms
             semantic_diff_sum = 0.0
             
             for synonym in candidate_synonyms:
-                # 保持分词对齐的替换方式
+                # Perform token-aligned replacement
                 modified_sentence, success = self.replace_with_alignment(
                     sentence, 
                     original_token_map[i], 
@@ -37,7 +37,7 @@ class SDCalculator:
                 if not success:
                     continue
                     
-                # 获取对齐后的嵌入向量
+                # Get aligned embeddings after replacement
                 modified_embeddings = self.get_aligned_embeddings(
                     modified_sentence, 
                     original_token_map
@@ -46,14 +46,14 @@ class SDCalculator:
                 if modified_embeddings is None:
                     continue
                     
-                # 计算语义差异
+                # Calculate semantic difference
                 semantic_diff = self.calculate_semantic_difference(
                     word_embeddings[i].unsqueeze(0), 
                     modified_embeddings[i].unsqueeze(0)
                 )
                 semantic_diff_sum += semantic_diff
             
-            # 计算结果
+            # Compute final score
             if len(candidate_synonyms) > 0:
                 sd = semantic_diff_sum / len(candidate_synonyms)
                 sd_scores[word] = round(float(sd), 2)
@@ -62,9 +62,9 @@ class SDCalculator:
         
         return sd_scores
 
-    # 新增辅助方法
+    # Helper methods
     def get_token_positions(self, sentence, target_words):
-        """获取每个目标词在token序列中的位置索引"""
+        """Map target words to their positions in token sequence"""
         tokens = self.tokenizer.tokenize(sentence)
         clean_tokens = [t.replace("##", "").lower() for t in tokens]
         
@@ -86,35 +86,35 @@ class SDCalculator:
         return position_map
 
     def replace_with_alignment(self, sentence, token_idx, synonym):
-        """保持分词对齐的替换方法"""
+        """Token-aligned replacement method"""
         tokens = self.tokenizer.tokenize(sentence)
         if token_idx >= len(tokens):
             return sentence, False
         
-        # 生成替换后的token序列
+        # Generate modified token sequence
         synonym_tokens = self.tokenizer.tokenize(synonym)
         new_tokens = tokens[:token_idx] + synonym_tokens + tokens[token_idx+1:]
         
         try:
-            # 重建有效句子
+            # Reconstruct valid sentence
             modified_sentence = self.tokenizer.convert_tokens_to_string(new_tokens)
             return modified_sentence, True
         except:
             return sentence, False
 
     def get_valid_synonyms(self, word):
-        """获取模型词汇表中有效的同义词"""
+        """Retrieve synonyms present in model's vocabulary"""
         synonyms = set()
         for syn in wn.synsets(word):
             for lemma in syn.lemmas():
                 candidate = lemma.name().replace('_', ' ')
-                # 验证是否在tokenizer词汇表中
+                # Verify existence in tokenizer's vocabulary
                 if self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(candidate)) != [self.tokenizer.unk_token_id]:
                     synonyms.add(candidate)
         return list(synonyms)
 
     def get_aligned_embeddings(self, sentence, original_pos_map):
-        """获取与原始位置对齐的嵌入向量"""
+        """Retrieve embeddings aligned with original positions"""
         inputs = self.tokenizer(sentence, return_tensors="pt", padding=True, truncation=True, max_length=512).to(self.model.device)
         
         with torch.no_grad():
@@ -122,7 +122,7 @@ class SDCalculator:
         
         embeddings = outputs.hidden_states[-1].squeeze(0)
         
-        # 获取当前句子的token位置映射
+        # Create current token position mapping
         current_tokens = self.tokenizer.convert_ids_to_tokens(inputs["input_ids"].squeeze().tolist())
         current_clean = [t.replace("##", "").lower() for t in current_tokens]
         
@@ -131,71 +131,71 @@ class SDCalculator:
             if pos < len(current_clean):
                 aligned_embeddings.append(embeddings[pos])
             else:
-                return None  # 位置不匹配
+                return None  # Position mismatch
         
         return torch.stack(aligned_embeddings)
 
-    # 修改后的MMD计算
     def calculate_semantic_difference(self, original_embedding, modified_embedding, gamma=0.1):
         """
-        使用余弦相似度计算语义差异
+        Compute semantic difference using cosine similarity
+        Returns: 1 - similarity score (difference metric)
         """
         cos = torch.nn.CosineSimilarity(dim=-1)
         similarity = cos(original_embedding, modified_embedding)
-        return 1 - similarity.item()  # 返回差异度
-    
+        return 1 - similarity.item()
+
     def get_pos_tags_spacy(self, sentence):
         """
-        使用spacy获取POS标签并过滤标点符号
+        Extract POS tags with spaCy, excluding punctuation
         """
         doc = self.nlp(sentence)
         pos_tags = [
             (token.text, token.pos_) 
             for token in doc 
-            if token.pos_ != 'PUNCT'  # 过滤标点符号
+            if token.pos_ != 'PUNCT'  # Exclude punctuation
         ]
         return pos_tags
 
     def get_words_embedding(self, sentence, pos_tags):
-        # Tokenize并获取embedding
+        # Tokenize and extract embeddings
         inputs = self.tokenizer(sentence, return_tensors="pt", padding=True, truncation=True, max_length=512).to(self.model.device)
         
         with torch.no_grad():
             outputs = self.model(**inputs, output_hidden_states=True)
         
-        # 获取embedding和原始token
+        # Extract embeddings and original tokens
         embeddings = outputs.hidden_states[-1].squeeze(0)
         tokens = self.tokenizer.convert_ids_to_tokens(inputs["input_ids"].squeeze().tolist())
         
-        # 生成清洗后的比较用token列表（小写且去除##）
+        # Generate cleaned tokens for comparison
         clean_tokens = [
             token.replace("##", "").lower() 
             for token in tokens 
             if token not in self.tokenizer.all_special_tokens
         ]
         
-        # 匹配逻辑
+        # Token matching logic
         matched_words = []
         matched_embeddings = []
-        search_start = 0  # 维护搜索起始位置
+        search_start = 0  # Track search start position
         
         for original_word, pos in pos_tags:
-            # 对原始词进行分词
+            # Tokenize original word
             subwords = self.tokenizer.tokenize(original_word)
             if not subwords:
                 continue
                 
-            # 获取第一个子词的清洗版本
+            # Get cleaned version of first subword
             target = subwords[0].replace("##", "").lower()
             
-            # 在token序列中顺序查找
+            # Sequential search in token sequence
             for idx in range(search_start, len(clean_tokens)):
                 if clean_tokens[idx] == target:
-                    # 保留原始词的大小写和形式
+                    # Preserve original word casing
                     matched_words.append(original_word)
-                    # 获取对应位置的embedding
+                    # Get corresponding embedding
                     matched_embeddings.append(embeddings[idx])
-                    # 更新搜索起始位置避免重复匹配
+                    # Update search start to prevent duplicates
                     search_start = idx + 1
                     break
         
@@ -203,7 +203,7 @@ class SDCalculator:
 
 
 if __name__ == "__main__":
-    # Example usage of the SDCalculator class
+    # Usage demonstration
     from transformers import BertModel, BertTokenizer
     model = BertModel.from_pretrained("bert-base-uncased")
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
