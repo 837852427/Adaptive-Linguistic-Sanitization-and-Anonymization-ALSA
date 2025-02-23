@@ -73,7 +73,7 @@ class CIISCalculator:
             if __name__ == "__main__":
                 print(f'word: {word}, cc_scores[word]: {cc_scores[word]}, sd_scores[word]: {sd_scores[word]}')
             
-            ciis_scores[word] = self.lambda_1 * cc_scores[word] + self.lambda_2 * sd_scores[word]
+            ciis_scores[(word, sentence)] = self.lambda_1 * cc_scores[word] + self.lambda_2 * sd_scores[word]
         
         return ciis_scores
 
@@ -92,4 +92,5 @@ if __name__ == "__main__":
     ciis_calculator = CIISCalculator(model, tokenizer)
     csv_path = "D:/论文/ALSA/test.csv"
     ciis_scores = ciis_calculator.calculate(csv_path)
-    print("CIIS score:\n", ciis_scores)
+    for (word, sentence), score in ciis_scores.items():
+        print(f'\n{word} from "{sentence}" and score is {score}')

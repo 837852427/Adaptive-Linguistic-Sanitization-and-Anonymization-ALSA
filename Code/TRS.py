@@ -30,7 +30,7 @@ class TRSCalculator:
         for sentence, task in zip(sentences, task_prompts):
             word_scores = self.calculate_TRS(sentence, task, k)
             for word, score in word_scores.items():
-                trs_scores[word] = score
+                trs_scores[(word, sentence)] = score
                 
         print("\n\033[1mCalculating TRS completed\033[0m")
         print('\n\033[1;32mThe TRS module calculation has been completed.\033[0m')
@@ -65,8 +65,8 @@ class TRSCalculator:
         Data input implementation matching CIIS's design
         """
         df = pd.read_csv(csv_path)
-        assert {'sentence','task_prompt'}.issubset(df.columns), \
-            "CSV must contain 'sentence' and 'task_prompt' columns"
+        # assert {'sentence','task_prompt'}.issubset(df.columns), \
+        #     "CSV must contain 'sentence' and 'task_prompt' columns"
         return df['sentence'].tolist(), df['task_prompt'].tolist()
 
     def get_ciis_tokens(self, sentence):
@@ -75,23 +75,16 @@ class TRSCalculator:
         """
         # Phase 1: SpaCy processing
         doc = self.nlp(sentence)
-        pos_tags = []
-        for token in doc:
-            if token.is_space or token.pos_ == 'PUNCT':
-                continue
-            if token.text.strip() == '-' and pos_tags:
-                pos_tags[-1] = (pos_tags[-1][0] + token.text, pos_tags[-1][1])
-                continue
-            cleaned_text = token.text.strip()
-            if cleaned_text:
-                pos_tags.append((cleaned_text, token.pos_))
+        pos_tags = [
+            (token.text, token.pos_) 
+            for token in doc 
+            if token.pos_ != 'PUNCT'  # Exclude punctuation
+        ]
 
-        # Phase 2: BERT subword merging
+        # Phase 2:  Merging
         merged_words = []
         for word, _ in pos_tags:
-            subwords = self.bert_tokenizer.tokenize(word)
-            merged = self.merge_subwords(subwords)
-            merged_words.append(merged)
+            merged_words.append(word)
             
         return merged_words
 
@@ -118,7 +111,7 @@ Text: {text}
 Task: {task}
 
 Scoring rules:
-1. Score format: "term":X.X (X.X ranges 0.0-1.0, allows decimals like 0.5, 0.75, 0.833)
+1. Score format: "term":X.X (X.X ranges 0.1-1.0, allows decimals like 0.5, 0.75, 0.833)
 2. Strictly maintain original casing (e.g. 'iPhone' must stay as 'iPhone')
 3. Must include all terms: {", ".join(target_words)}
 

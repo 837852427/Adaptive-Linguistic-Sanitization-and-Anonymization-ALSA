@@ -3,13 +3,12 @@ import CIIS
 import TRS
 import CASM
 import pandas as pd
-import re
-import pandas as pd
 from transformers import BertModel, BertTokenizer
+from collections import defaultdict
 
 class ALSA:
     """ALSA Framework: Comprehensive Text Analysis System"""
-    def __init__(self, model, tokenizer, csv_path, llm_model="gpt2"):
+    def __init__(self, model, tokenizer, csv_path, llm_model="gpt2", k=8, bert_model="bert-base-uncased"):
         """
         Initialize ALSA components
         :param model: Pretrained language model
@@ -21,10 +20,12 @@ class ALSA:
         self.tokenizer = tokenizer
         self.llm_model = llm_model
         self.csv_path = csv_path
+        self.k = k
+        self.bert_model = bert_model
         self.PLRS = PLRS.PLRSCalculator()
         self.CIIS = CIIS.CIISCalculator(model, tokenizer)
-        self.TRS = TRS.TRSCalculator(llm_model=llm_model)
-        self.CASM = CASM.CASMCalculator() 
+        self.TRS = TRS.TRSCalculator(bert_model=self.bert_model, llm_model=llm_model)
+        self.CASM = CASM.CASMCalculator(k=self.k, llm_model=self.llm_model) 
     
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
@@ -57,20 +58,20 @@ class ALSA:
         CASM_metrics = {}
         
         # Aggregate metrics
-        for word, score in PLRS_metrics.items():
-            CASM_metrics[word] = [score, 0.0, 0.0]
+        for key, score in PLRS_metrics.items():
+            CASM_metrics[key] = [score, 0.0, 0.0]
         
-        for word, score in CIIS_metrics.items():
-            if word in CASM_metrics:
-                CASM_metrics[word][1] = score
+        for key, score in CIIS_metrics.items():
+            if key in CASM_metrics:
+                CASM_metrics[key][1] = score
             else:  # This may need adjustment
-                CASM_metrics[word] = [0.0, score, 0.0]
+                CASM_metrics[key] = [0.0, score, 0.0]
         
-        for word, score in TRS_metrics.items():
-            if word in CASM_metrics:
-                CASM_metrics[word][2] = score
+        for key, score in TRS_metrics.items():
+            if key in CASM_metrics:
+                CASM_metrics[key][2] = score
             else:
-                CASM_metrics[word] = [0.0, 0.0, score]
+                CASM_metrics[key] = [0.0, 0.0, score]
         
         print(f'\nCASM Aggregation:\n{CASM_metrics}')
         print('\n\033[1mCASM Aggregation Completed\033[0m')
@@ -90,36 +91,55 @@ class ALSA:
 
     def calculate_part3(self, part2_output, csv_path):
         """
-        Execute text replacement and save to output.csv
-        :param part2_output: Dictionary from part2 {word: replacement}
-        :param csv_path: Path to original CSV file
+        Ultimate Replacement Logic: Precise Replacement Based on (word, sentence)
+        :param part2_output: Dictionary structure {(word, sentence): r_word}
+        :param csv_path: Path to the original CSV file
         """
         print('\n\033[1;32mStarting Part 3...\033[0m')
-        # Read original CSV
+        
+        # Read the original data
         df = pd.read_csv(csv_path)
         
-        # Create replacement patterns (handle word boundaries)
-        sorted_words = sorted(part2_output.keys(), 
-                            key=lambda x: len(x), 
-                            reverse=True)
+        # Build a three-level nested dictionary structure (optimized for query speed)
+        sentence_map = defaultdict(lambda: defaultdict(dict))
         
-        patterns = {
-            word: re.compile(r'\b{}\b'.format(re.escape(word)))
-            for word in sorted_words
-        }
-
+        for (word, sent), r_word in part2_output.items():
+            # Generate sentence hash fingerprints (to address performance issues with long texts as keys)
+            sent_hash = hash(sent)
+            # Store the original word form (preserving case sensitivity)
+            sentence_map[sent_hash][word.lower()][word] = r_word
+        
         # Process each sentence
         for index in df.index:
-            original = df.at[index, 'sentence']
-            modified = original
+            original_sent = df.at[index, 'sentence']
+            sent_hash = hash(original_sent)
             
-            # Apply replacements in descending length order
-            for word in sorted_words:
-                modified = patterns[word].sub(part2_output[word], modified)
+            # Get the replacement rules for the current sentence
+            if sent_hash not in sentence_map:
+                continue
+                
+            word_dict = sentence_map[sent_hash]
+            tokens = original_sent.split()  # Use word segmentation to ensure order
             
-            df.at[index, 'sentence'] = modified
-
-        # Save with original structure
+            # Generate replacement index mapping
+            replace_map = {}
+            for i, token in enumerate(tokens):
+                lower_token = token.lower()
+                if lower_token in word_dict:
+                    # Exact match the original word's case form
+                    if token in word_dict[lower_token]:
+                        replace_map[i] = word_dict[lower_token][token]
+                    # Compatible with variants such as capitalized first letters
+                    elif token.title() in word_dict[lower_token]:
+                        replace_map[i] = word_dict[lower_token][token.title()]
+            
+            # Perform index replacement
+            for i, r_word in replace_map.items():
+                tokens[i] = r_word
+            
+            df.at[index, 'sentence'] = ' '.join(tokens)
+        
+        # Save the result
         df.to_csv('output.csv', index=False)
         print("\033[1;32mPart3 completed. Saved to output.csv\033[0m")
 
@@ -128,18 +148,11 @@ if __name__ == "__main__":
     model = BertModel.from_pretrained("bert-base-uncased")
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     
-    # Prepare test data
-    test_data = {
-        "sentence": ["Jon applied for a loan using his credit card."],
-        "task_prompt": ["Identify financial-related word"]
-    }
-    pd.DataFrame(test_data).to_csv("test_trs.csv", index=False)
-    
     # Execute ALSA
     alsa = ALSA(
         model, 
         tokenizer, 
-        csv_path="test_trs.csv",
+        csv_path="data/ALSA.csv",
         llm_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     )
     alsa.calculate()

@@ -48,14 +48,30 @@ class CASMCalculator:
     def action_replace(self, words):
         """Replace words with synonyms"""
         replace_words = {}
-        for word, value in words.items():
-            replace_words[word] = self.get_random_synonym(word)
+        for (word, sentence), value in words.items():
+            replace_words[(word, sentence)] = self.get_random_synonym(word)
         return replace_words
 
     def action_encrypt(self, words):
-        """Temporarily using WordNet for random replacement; to be updated later"""
-        return self.action_replace(words)
-    
+        """ Word Replacement"""
+        def get_diff_word(word):
+            prompt = f"Give a different English word than '{word}': "
+            try:
+                response = self.llm(
+                    prompt,
+                    temperature=0.9,  # 提高随机性
+                    max_new_tokens=8
+                ).strip().lower()
+                
+                # 基础清洗：取第一个单词
+                result = response.split()[0] if response else word
+                return result if result != word else f"{word}_alt"
+                
+            except:
+                return f"{word}_alt"
+
+        return {(word, sentence): get_diff_word(word) for (word, sentence) in words}
+
     def action_delete(self, words):
         """Remove words from text"""
         delete_words = {}
@@ -71,7 +87,7 @@ class CASMCalculator:
         """
         # Prepare feature vectors
         word_vectors = []
-        for word, (plrs, ciis, trs) in word_metrics.items():
+        for (word, sentence), (plrs, ciis, trs) in word_metrics.items():
             word_vectors.append([plrs, ciis, trs])
 
         # Perform k-means clustering
@@ -92,33 +108,29 @@ class CASMCalculator:
         actions = {}
 
         # Assign actions based on cluster centroids
-        for i, word in enumerate(word_metrics):
+        for i, (word, sentence) in enumerate(word_metrics):
             cluster_id = clusters[i]
             centroid = centroids[cluster_id]
+            key = (word, sentence)
 
-            if self.check_retain(centroid, word_metrics[word]):
-                Retain_set[word] = word
-                actions[word] = "retain"
-            elif self.check_replace(centroid, word_metrics[word]):
-                Replace_set[word] = word
-                actions[word] = "replace"
-            elif self.check_encrypt(centroid, word_metrics[word]):
-                Encrypt_set[word] = word
-                actions[word] = "encrypt"
-            elif self.check_delete(centroid, word_metrics[word]):
-                Delte_set[word] = word
-                actions[word] = "delete"
+            if self.check_retain(centroid, word_metrics[key]):
+                Retain_set[key] = word
+                actions[key] = "retain"
+            elif self.check_replace(centroid, word_metrics[key]):
+                Replace_set[key] = word
+                actions[key] = "replace"
+            elif self.check_encrypt(centroid, word_metrics[key]):
+                Encrypt_set[key] = word
+                actions[key] = "encrypt"
+            elif self.check_delete(centroid, word_metrics[key]):
+                Delte_set[key] = word
+                actions[key] = "delete"
             else:
                 print(f"\033[1;31mNo matching action for {word}\033[0m")
                 print(f"Centroid: {centroid}, Metrics: {word_metrics[word]}")
                 sys.exit(1)
 
         print(f'Retain: {Retain_set}\nReplace: {Replace_set}\nEncrypt: {Encrypt_set}\nDelete: {Delte_set}\n')
-
-        if __name__ == "__main__":
-            print("\033[92m\033[1mActions assigned\033[0m\033[22m")
-            for word, action in actions.items():
-                print(f"{word}: {action}")
 
         return Retain_set, Replace_set, Encrypt_set, Delte_set
     
@@ -161,22 +173,21 @@ class CASMCalculator:
 if __name__ == "__main__":
     # Example usage
     word_metrics = {
-        "The": [0.1, 0.89, 0.2],
-        "quick": [0.8, 0.1, 0.9],
-        "brown": [0.2, 0.8, 0.28],
-        "fox": [0.9, 0.26, 0.1],
-        "jump": [0.33, 0.7, 0.3],
-        "over": [0.7, 0.23, 0.7],
-        "lazy": [0.4, 0.6, 0.4],
-        "dog": [0.0, 0.0, 0.0],
-        "clear": [0.18, 0.8, 0.8],
-        "crazy": [0.9, 0.29, 0.9],
-        "beauty": [0.7, 0.7, 0.677]
+        ('Jon', 'Jon applied for a loan using his credit card.'): [0.1, 0.89, 0.2],
+        ('applied', 'Jon applied for a loan using his credit card.'): [0.8, 0.1, 0.9],
+        ('for', 'Jon applied for a loan using his credit card.'): [0.2, 0.8, 0.28],
+        ('a', 'Jon applied for a loan using his credit card.'): [0.9, 0.26, 0.1],
+        ('loan', 'Jon applied for a loan using his credit card.'): [0.33, 0.7, 0.3],
+        ('using', 'Jon applied for a loan using his credit card.'): [0.7, 0.23, 0.7],
+        ('his', 'Jon applied for a loan using his credit card.'): [0.4, 0.6, 0.4],
+        ('credit', 'Jon applied for a loan using his credit card.'): [0.0, 0.0, 0.0],
+        ('card', 'Jon applied for a loan using his credit card.'): [0.18, 0.8, 0.8],
     }
 
     casm = CASMCalculator(k=2)
-    actions = casm.calculate_casm(word_metrics)
+    actions = casm.calculate(word_metrics)
 
     print("\n\033[1mCASM Actions:\033[0m")
+    print(f'\nwords_replace:\n{actions}\n')
     for word, action in actions.items():
         print(f"{word}: {action}")
