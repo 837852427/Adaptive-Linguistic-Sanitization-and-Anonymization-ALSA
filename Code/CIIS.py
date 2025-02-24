@@ -90,7 +90,7 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     model = BertModel.from_pretrained("bert-base-uncased")
     ciis_calculator = CIISCalculator(model, tokenizer)
-    csv_path = "D:/论文/ALSA/test.csv"
+    csv_path = "ALSA/test.csv"
     ciis_scores = ciis_calculator.calculate(csv_path)
     for (word, sentence), score in ciis_scores.items():
         print(f'\n{word} from "{sentence}" and score is {score}')

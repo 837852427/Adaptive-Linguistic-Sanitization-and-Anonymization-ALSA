@@ -24,18 +24,54 @@ The following parameters are set
 
 ```bash
 python ALSA.py \
---csv_path "huggingface:imdb" \
---bert_model "bert-base-uncased" \
---llm_model "EleutherAI/gpt-neo-1.3B" \
---k 8 \
+--csv_path "data/path" \
+--llama_model "decapoda-research/llama-7b-hf" \
+--llm_model "gpt2" \
+--k_means 8 \
 --lambda_1 0.5 \
 --lambda_2 0.7 \
 --alpha 0.6 \
 --beta 0.4 \
 --gamma 0.2 \
 --spacy_model "en_core_web_sm" \
---output_path "output.csv"
+--output_path "output.txt"
+
 ```
+#### Parameter Explanation:
+
+1. **`--csv_path`**  
+   Path to the dataset. This can either be a local path (e.g., `data/ALSA.csv`) .
+
+2. **`--llama_model`**  
+   The name of the Llama model. It supports pre-trained Llama models from HuggingFace (e.g., `decapoda-research/llama-7b-hf`). This model is used for TRS (Text Replacement System) calculations.
+
+3. **`--llm_model`**  
+   The name of the large language model (LLM) to be used (e.g., `gpt2`). This model is used for text generation tasks through the `pipeline`.
+
+4. **`--k_means`**  
+   The `k` value for K-means clustering, used in the CASM (Comprehensive Action-based Sentence Metrics) calculation.
+
+5. **`--lambda_1`**  
+   The first lambda parameter for CIIS (Contextual Information Integration System) calculation. It controls the weight of the first metric in CIIS.
+
+6. **`--lambda_2`**  
+   The second lambda parameter for CIIS calculation. It controls the weight of the second metric in CIIS.
+
+7. **`--alpha`**  
+   The alpha parameter for the CASM calculation. It influences the weight of the first metric in the aggregation of results.
+
+8. **`--beta`**  
+   The beta parameter for the CASM calculation. It influences the weight of the second metric in the aggregation of results.
+
+9. **`--gamma`**  
+   The gamma parameter for the CASM calculation. It influences the weight of the third metric in the aggregation of results.
+
+10. **`--spacy_model`**  
+    The spaCy model to be used for natural language processing tasks (e.g., `en_core_web_sm`).
+
+11. **`--output_path`**  
+    The path to save the final output file. The processed results will be saved to this file.
+
 
 <h2>Project Structure </h2>
 

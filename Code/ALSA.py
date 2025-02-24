@@ -1,35 +1,42 @@
-import os
+import sys
 import subprocess
 import pandas as pd
 import argparse
-from transformers import BertModel, BertTokenizer, pipeline
+from transformers import LlamaForCausalLM, LlamaTokenizer, pipeline
 from collections import defaultdict
 import PLRS
 import CIIS
 import TRS
 import CASM
 from datasets import load_dataset
-import sys
 
 class ALSA:
     """ALSA Framework: Comprehensive Text Analysis System"""
-    def __init__(self, model, tokenizer, csv_path, llm_model, k, bert_model,
+    def __init__(self, model, tokenizer, csv_path, llm_model, k_means, llama_model,
                  lambda_1=0.4, lambda_2=0.6, alpha=0.5, beta=0.5, gamma=0.3, spacy_model="en_core_web_sm"):
         """
         Initialize ALSA components
-        :param model: Pretrained language model
+        :param model: Pretrained language model (Llama model)
         :param tokenizer: Text tokenizer
-        :param csv_path: Input data path
-        :param llm_model: Large Language Model name
+        :param csv_path: Input data path or HuggingFace dataset
+        :param llm_model: Large Language Model (used for text generation)
+        :param k_means: K-means clustering parameter
+        :param llama_model: Llama model (used for TRS calculations)
+        :param lambda_1: CIIS parameter
+        :param lambda_2: CIIS parameter
+        :param alpha: CASM parameter
+        :param beta: CASM parameter
+        :param gamma: CASM parameter
+        :param spacy_model: spaCy model for NLP tasks
         """
-        # Check if models are local or need to be downloaded
-        self.model = BertModel.from_pretrained(model) if os.path.isdir(model) else BertModel.from_pretrained(model)
-        self.tokenizer = BertTokenizer.from_pretrained(tokenizer) if os.path.isdir(tokenizer) else BertTokenizer.from_pretrained(tokenizer)
-        
+        # Load Llama model and tokenizer
+        self.model = LlamaForCausalLM.from_pretrained(model)
+        self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer)
+
         # Initialize the LLM model pipeline
         self.llm_pipeline = pipeline("text-generation", model=llm_model)
 
-        # Load CSV data (can be local or from HuggingFace datasets)
+        # Load dataset
         if csv_path.startswith("huggingface"):
             dataset_name = csv_path.split("/")[1]
             dataset = load_dataset(dataset_name)
@@ -38,8 +45,8 @@ class ALSA:
             self.csv_data = pd.read_csv(csv_path)
         
         self.csv_path = csv_path
-        self.k = k
-        self.bert_model = bert_model
+        self.k_means = k_means
+        self.llama_model = llama_model
         self.lambda_1 = lambda_1
         self.lambda_2 = lambda_2
         self.alpha = alpha
@@ -47,10 +54,11 @@ class ALSA:
         self.gamma = gamma
         self.spacy_model = spacy_model
 
+        # Initialize other components
         self.PLRS = PLRS.PLRSCalculator()
         self.CIIS = CIIS.CIISCalculator(self.model, self.tokenizer, lambda_1, lambda_2, alpha, beta, gamma, spacy_model)
-        self.TRS = TRS.TRSCalculator(bert_model=self.bert_model, llm_model=self.llm_pipeline)
-        self.CASM = CASM.CASMCalculator(k=self.k, llm_model=self.llm_pipeline)
+        self.TRS = TRS.TRSCalculator(bert_model=self.llama_model, llm_model=self.llm_pipeline)
+        self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_pipeline)
 
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
@@ -174,9 +182,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Run ALSA Text Analysis')
     parser.add_argument('--csv_path', type=str, default="data/ALSA.csv", help='Path to CSV dataset or HuggingFace dataset')
-    parser.add_argument('--bert_model', type=str, default="bert-base-uncased", help='BERT model')
+    parser.add_argument('--llama_model', type=str, default="decapoda-research/llama-7b-hf", help='Llama model')
     parser.add_argument('--llm_model', type=str, default="gpt2", help='Large Language Model')
-    parser.add_argument('--k', type=int, default=8, help='Parameter k for CASM')
+    parser.add_argument('--k_means', type=int, default=8, help='K-means clustering parameter')
     parser.add_argument('--lambda_1', type=float, default=0.4, help='Lambda 1 for CIIS')
     parser.add_argument('--lambda_2', type=float, default=0.6, help='Lambda 2 for CIIS')
     parser.add_argument('--alpha', type=float, default=0.5, help='Alpha parameter for CASM')
@@ -188,12 +196,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     alsa = ALSA(
-        model=args.bert_model, 
-        tokenizer=args.bert_model, 
+        model=args.llama_model, 
+        tokenizer=args.llama_model, 
         csv_path=args.csv_path,
         llm_model=args.llm_model,
-        k=args.k,
-        bert_model=args.bert_model,
+        k_means=args.k_means,
+        llama_model=args.llama_model,
         lambda_1=args.lambda_1,
         lambda_2=args.lambda_2,
         alpha=args.alpha,
