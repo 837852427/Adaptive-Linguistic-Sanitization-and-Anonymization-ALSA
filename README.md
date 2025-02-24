@@ -25,9 +25,9 @@ The following parameters are set
 
 ```bash
 python ALSA.py \
---csv_path "data/path" \
---llama_model "decapoda-research/llama-7b-hf" \
---llm_model "gpt2" \
+--data_path "huggingface:imdb" \
+--bert_model "bert-base-uncased" \
+--llm_model "decapoda-research/llama-7b-hf" \
 --k_means 8 \
 --lambda_1 0.5 \
 --lambda_2 0.7 \
@@ -35,19 +35,20 @@ python ALSA.py \
 --beta 0.4 \
 --gamma 0.2 \
 --spacy_model "en_core_web_sm" \
---output_path "output.txt"
+--output_path "output.csv"
+
 
 ```
 #### Parameter Explanation:
 
-1. **`--csv_path`**  
+1. **`--data_path`**  
    Path to the dataset. This can either be a local path (e.g., `data/ALSA.csv`) .
 
-2. **`--llama_model`**  
-   The name of the Llama model. It supports pre-trained Llama models from HuggingFace (e.g., `decapoda-research/llama-7b-hf`). This model is used for TRS (Text Replacement System) calculations.
+2. **`--bert_model`**  
+   The name of the BERT model. It supports pre-trained BERT models from HuggingFace (e.g., `bert-base-uncased`). This model is used for CIIS (Contextual Information Integration System) calculations.
 
 3. **`--llm_model`**  
-   The name of the large language model (LLM) to be used (e.g., `gpt2`). This model is used for text generation tasks through the `pipeline`.
+   The name of the Llama model. It supports pre-trained Llama models from HuggingFace (e.g., `decapoda-research/llama-7b-hf`). This model is used for TRS (Text Replacement System) calculations.
 
 4. **`--k_means`**  
    The `k` value for K-means clustering, used in the CASM (Comprehensive Action-based Sentence Metrics) calculation.
@@ -67,7 +68,7 @@ python ALSA.py \
 9. **`--gamma`**  
    The gamma parameter for the CASM calculation. It influences the weight of the third metric in the aggregation of results.
 
-10. **`--spacy_model`**  
+10.  **`--spacy_model`**  
     The spaCy model to be used for natural language processing tasks (e.g., `en_core_web_sm`).
 
 11. **`--output_path`**  
