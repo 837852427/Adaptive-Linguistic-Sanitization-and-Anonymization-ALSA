@@ -1,14 +1,20 @@
+import os
+import subprocess
+import pandas as pd
+import argparse
+from transformers import BertModel, BertTokenizer, pipeline
+from collections import defaultdict
 import PLRS
 import CIIS
 import TRS
 import CASM
-import pandas as pd
-from transformers import BertModel, BertTokenizer
-from collections import defaultdict
+from datasets import load_dataset
+import sys
 
 class ALSA:
     """ALSA Framework: Comprehensive Text Analysis System"""
-    def __init__(self, model, tokenizer, csv_path, llm_model="gpt2", k=8, bert_model="bert-base-uncased"):
+    def __init__(self, model, tokenizer, csv_path, llm_model, k, bert_model,
+                 lambda_1=0.4, lambda_2=0.6, alpha=0.5, beta=0.5, gamma=0.3, spacy_model="en_core_web_sm"):
         """
         Initialize ALSA components
         :param model: Pretrained language model
@@ -16,17 +22,36 @@ class ALSA:
         :param csv_path: Input data path
         :param llm_model: Large Language Model name
         """
-        self.model = model
-        self.tokenizer = tokenizer
-        self.llm_model = llm_model
+        # Check if models are local or need to be downloaded
+        self.model = BertModel.from_pretrained(model) if os.path.isdir(model) else BertModel.from_pretrained(model)
+        self.tokenizer = BertTokenizer.from_pretrained(tokenizer) if os.path.isdir(tokenizer) else BertTokenizer.from_pretrained(tokenizer)
+        
+        # Initialize the LLM model pipeline
+        self.llm_pipeline = pipeline("text-generation", model=llm_model)
+
+        # Load CSV data (can be local or from HuggingFace datasets)
+        if csv_path.startswith("huggingface"):
+            dataset_name = csv_path.split("/")[1]
+            dataset = load_dataset(dataset_name)
+            self.csv_data = pd.DataFrame(dataset["train"])  # You can change this depending on the dataset split
+        else:
+            self.csv_data = pd.read_csv(csv_path)
+        
         self.csv_path = csv_path
         self.k = k
         self.bert_model = bert_model
+        self.lambda_1 = lambda_1
+        self.lambda_2 = lambda_2
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.spacy_model = spacy_model
+
         self.PLRS = PLRS.PLRSCalculator()
-        self.CIIS = CIIS.CIISCalculator(model, tokenizer)
-        self.TRS = TRS.TRSCalculator(bert_model=self.bert_model, llm_model=llm_model)
-        self.CASM = CASM.CASMCalculator(k=self.k, llm_model=self.llm_model) 
-    
+        self.CIIS = CIIS.CIISCalculator(self.model, self.tokenizer, lambda_1, lambda_2, alpha, beta, gamma, spacy_model)
+        self.TRS = TRS.TRSCalculator(bert_model=self.bert_model, llm_model=self.llm_pipeline)
+        self.CASM = CASM.CASMCalculator(k=self.k, llm_model=self.llm_pipeline)
+
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
         triple_metrics = self.calculate_part1()
@@ -38,17 +63,14 @@ class ALSA:
         print('\033[1;32mStarting Part 1 Calculations...\033[0m')
 
         # PLRS Calculation
-        PLRS_metrics = {}
         PLRS_metrics = self.PLRS.calculate()
         print(f'\nPLRS Results:\n{PLRS_metrics}')
         
         # CIIS Calculation
-        CIIS_metrics = {}
         CIIS_metrics = self.CIIS.calculate(self.csv_path)
         print(f'\nCIIS Results:\n{CIIS_metrics}')
         
         # TRS Calculation
-        TRS_metrics = {}
         TRS_metrics = self.TRS.calculate(self.csv_path)
         print(f'\nTRS Results:\n{TRS_metrics}')
         
@@ -64,7 +86,7 @@ class ALSA:
         for key, score in CIIS_metrics.items():
             if key in CASM_metrics:
                 CASM_metrics[key][1] = score
-            else:  # This may need adjustment
+            else:
                 CASM_metrics[key] = [0.0, score, 0.0]
         
         for key, score in TRS_metrics.items():
@@ -98,7 +120,7 @@ class ALSA:
         print('\n\033[1;32mStarting Part 3...\033[0m')
         
         # Read the original data
-        df = pd.read_csv(csv_path)
+        df = self.csv_data
         
         # Build a three-level nested dictionary structure (optimized for query speed)
         sentence_map = defaultdict(lambda: defaultdict(dict))
@@ -143,19 +165,42 @@ class ALSA:
         df.to_csv('output.csv', index=False)
         print("\033[1;32mPart3 completed. Saved to output.csv\033[0m")
 
+def install_requirements():
+    """Install necessary dependencies"""
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "transformers", "pandas", "spacy", "datasets"])
+
 if __name__ == "__main__":
-    # Initialize components
-    model = BertModel.from_pretrained("bert-base-uncased")
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    install_requirements()
+
+    parser = argparse.ArgumentParser(description='Run ALSA Text Analysis')
+    parser.add_argument('--csv_path', type=str, default="data/ALSA.csv", help='Path to CSV dataset or HuggingFace dataset')
+    parser.add_argument('--bert_model', type=str, default="bert-base-uncased", help='BERT model')
+    parser.add_argument('--llm_model', type=str, default="gpt2", help='Large Language Model')
+    parser.add_argument('--k', type=int, default=8, help='Parameter k for CASM')
+    parser.add_argument('--lambda_1', type=float, default=0.4, help='Lambda 1 for CIIS')
+    parser.add_argument('--lambda_2', type=float, default=0.6, help='Lambda 2 for CIIS')
+    parser.add_argument('--alpha', type=float, default=0.5, help='Alpha parameter for CASM')
+    parser.add_argument('--beta', type=float, default=0.5, help='Beta parameter for CASM')
+    parser.add_argument('--gamma', type=float, default=0.3, help='Gamma parameter for CASM')
+    parser.add_argument('--spacy_model', type=str, default="en_core_web_sm", help='spaCy model')
+    parser.add_argument('--output_path', type=str, default="output.csv", help='Path to save the output')
     
-    # Execute ALSA
+    args = parser.parse_args()
+
     alsa = ALSA(
-        model, 
-        tokenizer, 
-        csv_path="data/ALSA.csv",
-        llm_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        model=args.bert_model, 
+        tokenizer=args.bert_model, 
+        csv_path=args.csv_path,
+        llm_model=args.llm_model,
+        k=args.k,
+        bert_model=args.bert_model,
+        lambda_1=args.lambda_1,
+        lambda_2=args.lambda_2,
+        alpha=args.alpha,
+        beta=args.beta,
+        gamma=args.gamma,
+        spacy_model=args.spacy_model
     )
     alsa.calculate()
 
     print("\n\033[1;32mALL COMPLETED\033[0m")
-
