@@ -10,7 +10,7 @@ The ALSA framework comprises four modules, which integrate the results of Privac
 * [PyTorch](https://pytorch.org/) >= 2.6.0+cu118
 
 
-<h2>Basic Usage </h2>
+<h2>Usage </h2>
 
 ```bash
 cd Code 
@@ -18,6 +18,7 @@ python ALSA.py
 ```
 
 Step1：Switch to the main code directory of the project (including ALSA.py and model code)
+
 Step2：Execution code
 
 The following parameters are set
