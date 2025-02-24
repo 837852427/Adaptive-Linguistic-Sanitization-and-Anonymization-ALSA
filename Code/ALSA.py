@@ -53,7 +53,7 @@ class ALSA:
         self.spacy_model = spacy_model
 
         # Initialize other components
-        self.PLRS = PLRS.PLRSCalculator()
+        self.PLRS = PLRS.PLRSCalculator(model_path=tokenizer, data_path=data_path, spacy_model=spacy_model)
         self.CIIS = CIIS.CIISCalculator(self.model, self.tokenizer, lambda_1, lambda_2, alpha, beta, gamma, spacy_model)
         self.TRS = TRS.TRSCalculator(bert_model=self.tokenizer, llm_model=self.llm_pipeline)
         self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_pipeline)

@@ -1,73 +1,8 @@
-import numpy as np
-import random
-import torch
 from transformers import BertTokenizer, BertModel
-import nltk
-
-# =====================
-# 0. Set Random Seeds
-# =====================
-SEED = 42
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(SEED)
-
-# Download NLTK word corpus (will download on first run)
-nltk.download('words')
-from nltk.corpus import words
-
-# =============================
-# 1. Random Word Selection
-# =============================
-# Filter to keep only alphabetic words
-vocab = [w for w in words.words() if w.isalpha()]
-# Randomly sample 500 words
-selected_words = random.sample(vocab, 500)
-
-# =============================
-# 2. BERT Embedding Extraction 
-# =============================
-# Load pre-trained BERT model and tokenizer (using local model path)
-model_path = "bert-base-uncased"
-tokenizer = BertTokenizer.from_pretrained(model_path)
-model = BertModel.from_pretrained(model_path)
-model.eval()  # Set to evaluation mode
-
-def get_word_embedding(word):
-    """
-    Generate word embedding using BERT:
-    1. Tokenize input word
-    2. Extract hidden states from BERT
-    3. Handle multi-token words by averaging subword embeddings
-    Returns: 768-dimensional numpy array
-    """
-    inputs = tokenizer(word, return_tensors="pt")
-    with torch.no_grad():
-        outputs = model(**inputs)
-    token_embeddings = outputs.last_hidden_state[0]  # (sequence_length, hidden_size)
-    if token_embeddings.shape[0] > 2:
-        embedding = token_embeddings[1:-1].mean(dim=0)
-    else:
-        embedding = token_embeddings.mean(dim=0)
-    return embedding.numpy()
-
-embeddings = [get_word_embedding(word) for word in selected_words]
-X = np.stack(embeddings)  # Shape: (500, 768)
-
-# ========================================
-# 3. Isolation Forest Implementation
-# ========================================
-def c(n):
-    """
-    Calculate expected path length adjustment term:
-    c(n) = 2(ln(n-1) + γ) - 2(n-1)/n
-    where γ is Euler-Mascheroni constant (~0.5772)
-    """
-    if n <= 1:
-        return 0
-    return 2 * (np.log(n - 1) + 0.5772156649) - 2 * (n - 1) / n
+import pandas as pd
+import numpy as np
+import torch
+import spacy
 
 class IsolationTree:
     def __init__(self, height_limit, current_height=0):
@@ -144,6 +79,16 @@ def compute_average_depth(x, trees):
     depths = [tree.path_length(x) for tree in trees]
     return np.mean(depths)
 
+def c(n):
+    """
+    Calculate expected path length adjustment term:
+    c(n) = 2(ln(n-1) + γ) - 2(n-1)/n
+    where γ is Euler-Mascheroni constant (~0.5772)
+    """
+    if n <= 1:
+        return 0
+    return 2 * (np.log(n - 1) + 0.5772156649) - 2 * (n - 1) / n
+
 def compute_outlier_score(avg_depth, sample_size):
     """
     Compute outlier score using formula:
@@ -153,27 +98,95 @@ def compute_outlier_score(avg_depth, sample_size):
     return 0.0 if c_val == 0 else 2 ** (-avg_depth / c_val)
 
 class PLRSCalculator:
-    def __init__(self):
-        pass
+    def __init__(self, model_path = "bert-base-uncased", data_path = '', spacy_model="en_core_web_sm"):
+        self.model_path = model_path
+        self.data_path = data_path
+        self.tokenizer = BertTokenizer.from_pretrained(model_path)
+        self.model = BertModel.from_pretrained(model_path)
+        self.model.eval()  # Set to evaluation mode
+        self.nlp = spacy.load(spacy_model)  # Load spaCy model for POS tagging and parsing
+
+    def input_sentence(self):
+        """
+        Read the input sentence from a CSV file.
+        """
+        df = pd.read_csv(self.data_path)
+        sentences = df['sentence'].tolist()
+
+        return sentences
     
     def calculate(self):
 
         print('\n\033[1mCalculating PLRS Metrics\033[0m')
 
-        PLRS_metrics = {}
+        sentences = self.input_sentence()
+
+        # Calculate the CIIS scores for each sentence and merge them
+        PLRS_scores = {}
+        for sentence in sentences:
+            PLRS_scores_sentence = self.calculate_PLRS(sentence)
+            PLRS_scores.update(PLRS_scores_sentence)
+        print("\n\033[1mCalculating CIIS completed\033[0m")
+
 
         print('\033[1;32mPLRS Completed\033[0m')
-        return PLRS_metrics
+        return PLRS_scores
+    
+    def calculate_PLRS(self, sentence):
+        words = self.get_words(sentence)
+        embeddings = [self.get_word_embedding(word) for word in words]
+        X = np.stack(embeddings)
+        trees = build_isolation_forest(X, num_trees=8, sample_size=256)
+        
+        plrs_scors = {}
+        for i, word in enumerate(words):
+            x = X[i]
+            avg_depth = compute_average_depth(x, trees)
+            os_w = compute_outlier_score(avg_depth, sample_size=256)
+            plrs_scors[(word, sentence)] = os_w
+        
+        return plrs_scors
+    
+    def get_word_embedding(self, word):
+        """
+        Generate word embedding using BERT:
+        1. Tokenize input word
+        2. Extract hidden states from BERT
+        3. Handle multi-token words by averaging subword embeddings
+        Returns: 768-dimensional numpy array
+        """
+        inputs = self.tokenizer(word, return_tensors="pt")
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        token_embeddings = outputs.last_hidden_state[0]  # (sequence_length, hidden_size)
+        if token_embeddings.shape[0] > 2:
+            embedding = token_embeddings[1:-1].mean(dim=0)
+        else:
+            embedding = token_embeddings.mean(dim=0)
+        return embedding.numpy()
+    
+    def get_words(self, sentence):
+        """
+        Implement identical token processing logic as CIIS
+        """
+        # Phase 1: SpaCy processing
+        doc = self.nlp(sentence)
+        pos_tags = [
+            (token.text, token.pos_) 
+            for token in doc 
+            if token.pos_ != 'PUNCT'  # Exclude punctuation
+        ]
 
-# =============================
-# 4. Execution & Output
-# =============================
+        # Phase 2:  Merging
+        merged_words = []
+        for word, _ in pos_tags:
+            merged_words.append(word)
+            
+        return merged_words
+
 if __name__ == "__main__":
-    trees = build_isolation_forest(X, num_trees=8, sample_size=256)
+    plrs = PLRSCalculator(data_path='data/ALSA.csv')
+    ans = plrs.calculate()
 
-    print("Word\tOutlier Score (OS)")
-    for i, word in enumerate(selected_words):
-        x = X[i]
-        avg_depth = compute_average_depth(x, trees)
-        os_w = compute_outlier_score(avg_depth, sample_size=256)
-        print(f"{word}\t{os_w:.4f}")
+    for (word, sentence), score in ans.items():
+        print(f'{word}, {sentence}: {score}')
