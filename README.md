@@ -1,4 +1,4 @@
-# Adaptive Linguistic Sanitization and Anonymization (ALSA)
+# ALSA:Context-Sensitive Prompt Privacy Preservation in Large Language Models
 
 <img src="https://github.com/837852427/Adaptive-Linguistic-Sanitization-and-Anonymization-ALSA/blob/main/ALSA%20Framework.png?raw=true" style="zoom:50%;" />
 
