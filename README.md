@@ -12,13 +12,13 @@ The ALSA framework comprises four modules, which integrate the results of Privac
 
 <h2>Usage </h2>
 
-**Step1**：Navigate to the main code directory within the current repository, which contains `ALSA.py` and the core framework of ALSA.
+**Step1**: Navigate to the main code directory within the current repository, which contains `ALSA.py` and the core framework of ALSA.
 
 ```bash
 cd Code 
 ```
 
-**Step2**：Execute the code.
+**Step2**: Execute the code.
 
 ALSA can be executed with its default configuration using the following command:
 
