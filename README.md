@@ -20,6 +20,14 @@ cd Code
 
 Step2：Execution code
 
+ALSA can be executed with its default configuration using the following command:
+
+```bash
+python ALSA.py
+```
+
+Alternatively, users may modify its configuration to fit specific requirements, as shown below:
+
 ```bash
 python ALSA.py \
 --data_path "huggingface:imdb" \
@@ -36,7 +44,7 @@ python ALSA.py \
 
 
 ```
-#### Parameter Explanation:
+#### configuration Explanation:
 
 1. **`--data_path`**  
    Path to the dataset. This can either be a local path (e.g., `data/ALSA.csv`) .
