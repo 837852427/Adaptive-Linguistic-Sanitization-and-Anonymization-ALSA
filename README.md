@@ -41,8 +41,6 @@ python ALSA.py \
 --gamma 0.2 \
 --spacy_model "en_core_web_sm" \
 --output_path "output.csv"
-
-
 ```
 #### configuration Explanation:
 
