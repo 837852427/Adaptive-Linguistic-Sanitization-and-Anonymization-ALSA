@@ -13,7 +13,8 @@ from datasets import load_dataset
 class ALSA:
     """ALSA Framework: Comprehensive Text Analysis System"""
     def __init__(self, model, tokenizer, data_path, llm_model, k_means,
-                 lambda_1=0.4, lambda_2=0.6, alpha=0.5, beta=0.5, gamma=0.3, spacy_model="en_core_web_sm"):
+                 lambda_1=0.4, lambda_2=0.6, alpha=0.5, beta=0.5, gamma=0.3, 
+                 spacy_model="en_core_web_sm", k=5, output_path='output.txt'):
         """
         Initialize ALSA components
         :param model: Pretrained language model (Llama model)
@@ -27,6 +28,8 @@ class ALSA:
         :param beta: CASM parameter
         :param gamma: CASM parameter
         :param spacy_model: spaCy model for NLP tasks
+        :param k: The k-th iteration in the TRS
+        :param output_path: The path to save the final privacy-preserved prompt
         """
         # Load Llama model and tokenizer
         self.model = LlamaForCausalLM.from_pretrained(model)
@@ -51,11 +54,12 @@ class ALSA:
         self.beta = beta
         self.gamma = gamma
         self.spacy_model = spacy_model
+        self.output_path = output_path
 
         # Initialize other components
         self.PLRS = PLRS.PLRSCalculator(model_path=tokenizer, data_path=data_path, spacy_model=spacy_model)
         self.CIIS = CIIS.CIISCalculator(self.model, self.tokenizer, lambda_1, lambda_2, alpha, beta, gamma, spacy_model)
-        self.TRS = TRS.TRSCalculator(bert_model=self.tokenizer, llm_model=self.llm_pipeline)
+        self.TRS = TRS.TRSCalculator(bert_model=self.tokenizer, llm_model=self.llm_pipeline, k=k)
         self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_pipeline)
 
     def calculate(self):
@@ -117,7 +121,7 @@ class ALSA:
         print('\n\033[1;32mPart 2 Completed\033[0m')
         return words_metrics
 
-    def calculate_part3(self, part2_output, data_path):
+    def calculate_part3(self, part2_output):
         """
         Ultimate Replacement Logic: Precise Replacement Based on (word, sentence)
         :param part2_output: Dictionary structure {(word, sentence): r_word}
@@ -167,7 +171,7 @@ class ALSA:
             processed_sentences.append(' '.join(tokens))
         
         # Save as TXT file
-        with open(self.output_file, 'w', encoding='utf-8') as f:
+        with open(self.output_path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(processed_sentences))
         
         print("\033[1;32mPart3 completed. Saved to output.txt\033[0m")
@@ -190,6 +194,7 @@ if __name__ == "__main__":
     parser.add_argument('--beta', type=float, default=0.5, help='Beta parameter for CASM')
     parser.add_argument('--gamma', type=float, default=0.3, help='Gamma parameter for CASM')
     parser.add_argument('--spacy_model', type=str, default="en_core_web_sm", help='spaCy model')
+    parser.add_argument('--k', type=int, default=5, help='K-th iteration in the TRS')
     parser.add_argument('--output_path', type=str, default="output.txt", help='Path to save the output')
     
     args = parser.parse_args()
@@ -205,7 +210,9 @@ if __name__ == "__main__":
         alpha=args.alpha,
         beta=args.beta,
         gamma=args.gamma,
-        spacy_model=args.spacy_model
+        spacy_model=args.spacy_model,
+        k=args.k,
+        output_path=args.output_path
     )
     alsa.calculate()
 

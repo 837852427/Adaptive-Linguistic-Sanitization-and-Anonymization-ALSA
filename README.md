@@ -40,6 +40,7 @@ python ALSA.py \
 --beta 0.4 \
 --gamma 0.2 \
 --spacy_model "en_core_web_sm" \
+--k 5 \
 --output_path "output.csv"
 ```
 #### configuration Explanation:
@@ -74,7 +75,10 @@ python ALSA.py \
 10.  **`--spacy_model`**  
     The spaCy model to be used for natural language processing tasks (e.g., `en_core_web_sm`).
 
-11. **`--output_path`**  
+11. **`--k`**
+    In TRS, LLM conducts k iterations.
+
+12. **`--output_path`**  
     The path to save the final privacy-preserved prompt. The processed results will be saved to this file.
 
 

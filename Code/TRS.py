@@ -5,15 +5,16 @@ import inflect
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 class TRSCalculator:
-    def __init__(self, bert_model="bert-base-uncased", llm_model="gpt2"):
+    def __init__(self, bert_model="bert-base-uncased", llm_model="gpt2", k=5):
         """Initialize tokenization components with same configuration as TRS"""
         self.nlp = spacy.load("en_core_web_sm")
         self.bert_tokenizer = AutoTokenizer.from_pretrained(bert_model)
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
         self.llm_model = AutoModelForCausalLM.from_pretrained(llm_model)
         self.llm_tokenizer.pad_token = self.llm_tokenizer.eos_token
+        self.k = k
 
-    def calculate(self, csv_path, k=5):
+    def calculate(self, csv_path):
         """
         Main calculation interface following TRS's design
         """
@@ -28,7 +29,7 @@ class TRSCalculator:
         print("\n\033[1mCalculating TRS...\033[0m")
 
         for sentence, task in zip(sentences, task_prompts):
-            word_scores = self.calculate_TRS(sentence, task, k)
+            word_scores = self.calculate_TRS(sentence, task, self.k)
             for word, score in word_scores.items():
                 trs_scores[(word, sentence)] = score
                 
