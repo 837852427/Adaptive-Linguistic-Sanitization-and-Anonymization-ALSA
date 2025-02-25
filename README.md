@@ -75,7 +75,7 @@ python ALSA.py \
 10.  **`--spacy_model`**  
     The spaCy model to be used for natural language processing tasks (e.g., `en_core_web_sm`).
 
-11. **`--k`**
+11. **`--k`**  
     The backbone LLM conducts k iterations of TRS calculation.
 
 13. **`--output_path`**  
