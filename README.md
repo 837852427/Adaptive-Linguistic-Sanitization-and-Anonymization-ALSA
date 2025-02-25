@@ -76,7 +76,7 @@ python ALSA.py \
     The spaCy model to be used for natural language processing tasks (e.g., `en_core_web_sm`).
 
 11. **`--k`**
-    In TRS, LLM conducts k iterations.
+    The backbone LLM conducts k iterations of TRS calculation.
 
 12. **`--output_path`**  
     The path to save the final privacy-preserved prompt. The processed results will be saved to this file.
