@@ -55,7 +55,7 @@ python ALSA.py \
    The name of the backbone LLM. It supports pre-trained Llama models from HuggingFace (e.g., `decapoda-research/llama-7b-hf`). 
 
 4. **`--k_means`**  
-   The `k` value for K-means clustering.
+   The `K` value for K-means clustering.
 
 5. **`--lambda_1`**  
    The first lambda parameter for CIIS calculation. It controls the weight of the first hyperparameter in CIIS.
@@ -78,7 +78,7 @@ python ALSA.py \
 11. **`--k`**
     The backbone LLM conducts k iterations of TRS calculation.
 
-12. **`--output_path`**  
+13. **`--output_path`**  
     The path to save the final privacy-preserved prompt. The processed results will be saved to this file.
 
 
