@@ -12,16 +12,13 @@ The ALSA framework comprises four modules, which integrate the results of Privac
 
 <h2>Usage </h2>
 
-```bash
-cd Code 
-python ALSA.py
-```
-
 Step1：Switch to the main code directory of the project (including ALSA.py and model code)
 
-Step2：Execution code
+```bash
+cd Code 
+```
 
-The following parameters are set
+Step2：Execution code
 
 ```bash
 python ALSA.py \
@@ -45,34 +42,34 @@ python ALSA.py \
    Path to the dataset. This can either be a local path (e.g., `data/ALSA.csv`) .
 
 2. **`--bert_model`**  
-   The name of the BERT model. It supports pre-trained BERT models from HuggingFace (e.g., `bert-base-uncased`). This model is used for CIIS (Contextual Information Integration System) calculations.
+   The name of the BERT model. It supports pre-trained BERT models from HuggingFace (e.g., `bert-base-uncased`). 
 
 3. **`--llm_model`**  
-   The name of the Llama model. It supports pre-trained Llama models from HuggingFace (e.g., `decapoda-research/llama-7b-hf`). This model is used for TRS (Text Replacement System) calculations.
+   The name of the backbone LLM. It supports pre-trained Llama models from HuggingFace (e.g., `decapoda-research/llama-7b-hf`). 
 
 4. **`--k_means`**  
-   The `k` value for K-means clustering, used in the CASM (Comprehensive Action-based Sentence Metrics) calculation.
+   The `k` value for K-means clustering.
 
 5. **`--lambda_1`**  
-   The first lambda parameter for CIIS (Contextual Information Integration System) calculation. It controls the weight of the first metric in CIIS.
+   The first lambda parameter for CIIS calculation. It controls the weight of the first hyperparameter in CIIS.
 
 6. **`--lambda_2`**  
-   The second lambda parameter for CIIS calculation. It controls the weight of the second metric in CIIS.
+   The second lambda parameter for CIIS calculation. It controls the weight of the second hyperparameter in CIIS.
 
 7. **`--alpha`**  
-   The alpha parameter for the CASM calculation. It influences the weight of the first metric in the aggregation of results.
+   In CIIS, the alpha hyperparameter is used in the Contextual Coherence (CC) computation, directly affecting the matrix $Q_{ij}$.
 
 8. **`--beta`**  
-   The beta parameter for the CASM calculation. It influences the weight of the second metric in the aggregation of results.
+   In CIIS, the beta hyperparameter is used in the Contextual Coherence (CC) computation, directly affecting the $r^*_{ij}$.
 
 9. **`--gamma`**  
-   The gamma parameter for the CASM calculation. It influences the weight of the third metric in the aggregation of results.
+   In CIIS, the gamma hyperparameter is used in the Contextual Coherence (CC) computation, directly affecting the matrix $D_{ij}$.
 
 10.  **`--spacy_model`**  
     The spaCy model to be used for natural language processing tasks (e.g., `en_core_web_sm`).
 
 11. **`--output_path`**  
-    The path to save the final output file. The processed results will be saved to this file.
+    The path to save the final privacy-preserved prompt. The processed results will be saved to this file.
 
 
 <h2>Project Structure </h2>
