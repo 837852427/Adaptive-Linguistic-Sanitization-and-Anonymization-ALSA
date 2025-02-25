@@ -6,19 +6,19 @@ The ALSA framework comprises four modules, which integrate the results of Privac
 
 <h2>Dependencies </h2>
 
-* Python >= 3.9.21
-* [PyTorch](https://pytorch.org/) >= 2.6.0+cu118
+* Python >= 3.9
+* PyTorch >= 2.6.0
 
 
 <h2>Usage </h2>
 
-Step1：Switch to the main code directory of the project (including ALSA.py and model code)
+**Step1**：Navigate to the main code directory within the current repository, which contains `ALSA.py` and the core framework of ALSA.
 
 ```bash
 cd Code 
 ```
 
-Step2：Execution code
+**Step2**：Execute the code.
 
 ALSA can be executed with its default configuration using the following command:
 
