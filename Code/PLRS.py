@@ -98,11 +98,12 @@ def compute_outlier_score(avg_depth, sample_size):
     return 0.0 if c_val == 0 else 2 ** (-avg_depth / c_val)
 
 class PLRSCalculator:
-    def __init__(self, model_path = "bert-base-uncased", data_path = '', spacy_model="en_core_web_sm"):
-        self.model_path = model_path
+    def __init__(self, model, tokenizer, device, data_path='', spacy_model="en_core_web_sm"):
         self.data_path = data_path
-        self.tokenizer = BertTokenizer.from_pretrained(model_path)
-        self.model = BertModel.from_pretrained(model_path)
+        self.device = model.device
+        self.tokenizer = tokenizer
+        self.device = device
+        self.model = model
         self.model.eval()  # Set to evaluation mode
         self.nlp = spacy.load(spacy_model)  # Load spaCy model for POS tagging and parsing
 
@@ -155,7 +156,12 @@ class PLRSCalculator:
         3. Handle multi-token words by averaging subword embeddings
         Returns: 768-dimensional numpy array
         """
-        inputs = self.tokenizer(word, return_tensors="pt")
+        inputs = self.tokenizer(
+            word, 
+            return_tensors="pt",
+            padding=True,
+            truncation=True
+        ).to(self.device)
         with torch.no_grad():
             outputs = self.model(**inputs)
         token_embeddings = outputs.last_hidden_state[0]  # (sequence_length, hidden_size)
@@ -163,7 +169,7 @@ class PLRSCalculator:
             embedding = token_embeddings[1:-1].mean(dim=0)
         else:
             embedding = token_embeddings.mean(dim=0)
-        return embedding.numpy()
+        return embedding.cpu().numpy()
     
     def get_words(self, sentence):
         """
@@ -185,7 +191,10 @@ class PLRSCalculator:
         return merged_words
 
 if __name__ == "__main__":
-    plrs = PLRSCalculator(data_path='data/ALSA.csv')
+    model = "bert-base-uncased"
+    plrs = PLRSCalculator(model=BertModel.from_pretrained(model),
+                            tokenizer=BertTokenizer.from_pretrained(model),
+                          data_path='data/ALSA.csv')
     ans = plrs.calculate()
 
     for (word, sentence), score in ans.items():

@@ -7,7 +7,7 @@ import random
 from transformers import pipeline
 
 # Download the WordNet corpus
-nltk.download('wordnet')
+# nltk.download('wordnet')
 
 # Note: Potential memory leak risk when using k-means on Windows
 import warnings

@@ -3,7 +3,7 @@ from sklearn.metrics.pairwise import rbf_kernel
 import nltk
 import spacy
 from nltk.corpus import wordnet as wn
-nltk.download('wordnet')
+# nltk.download('wordnet')
 
 class SDCalculator:
     def __init__(self, model, tokenizer, spacy_model="en_core_web_sm"):

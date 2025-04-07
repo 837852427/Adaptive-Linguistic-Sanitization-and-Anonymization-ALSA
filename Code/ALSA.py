@@ -2,19 +2,22 @@ import sys
 import subprocess
 import pandas as pd
 import argparse
-from transformers import LlamaForCausalLM, LlamaTokenizer, pipeline
 from collections import defaultdict
+from transformers import BertTokenizer, BertModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import PLRS
 import CIIS
 import TRS
 import CASM
+import torch
 from datasets import load_dataset
+
+import time
 
 class ALSA:
     """ALSA Framework: Comprehensive Text Analysis System"""
-    def __init__(self, model, tokenizer, data_path, llm_model, k_means,
-                 lambda_1=0.4, lambda_2=0.6, alpha=0.5, beta=0.5, gamma=0.3, 
-                 spacy_model="en_core_web_sm", k=5, output_path='output.txt'):
+    def __init__(self, bert_model, bert_tokenizer, data_path, output_path,  llm_model, k_means,
+                 lambda_1=0.4, lambda_2=0.6, alpha=0.5, beta=0.5, gamma=0.3, spacy_model="en_core_web_sm"):
         """
         Initialize ALSA components
         :param model: Pretrained language model (Llama model)
@@ -28,25 +31,25 @@ class ALSA:
         :param beta: CASM parameter
         :param gamma: CASM parameter
         :param spacy_model: spaCy model for NLP tasks
-        :param k: The k-th iteration in the TRS
-        :param output_path: The path to save the final privacy-preserved prompt
         """
-        # Load Llama model and tokenizer
-        self.model = LlamaForCausalLM.from_pretrained(model)
-        self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Initialize the LLM model pipeline
-        self.llm_pipeline = pipeline("text-generation", model=llm_model)
+        self.bert_model_name = bert_model
+        self.bert_tokenizer_tokenizer = bert_tokenizer
+
+        # Initialize the LLM model
+        self.llm_model_name = llm_model
 
         # Load dataset
         if data_path.startswith("huggingface"):
             dataset_name = data_path.split("/")[1]
             dataset = load_dataset(dataset_name)
-            self.data_path = pd.DataFrame(dataset["train"])  # You can change this depending on the dataset split
+            self.dataset = pd.DataFrame(dataset["train"])  # You can change this depending on the dataset split
         else:
-            self.data_path = pd.read_csv(data_path)
+            self.dataset = pd.read_csv(data_path)
         
         self.data_path = data_path
+        self.output_path = output_path
         self.k_means = k_means
         self.lambda_1 = lambda_1
         self.lambda_2 = lambda_2
@@ -54,18 +57,56 @@ class ALSA:
         self.beta = beta
         self.gamma = gamma
         self.spacy_model = spacy_model
-        self.output_path = output_path
+
+        self.bert_model = BertModel.from_pretrained(bert_model).to(self.device)
+        if self.device.type == 'cuda':
+            self.bert_model = self.bert_model.half()  # 使用半精度
+            torch.backends.cudnn.benchmark = True  # 启用cuDNN优化
+
+        self.bert_tokenizer = BertTokenizer.from_pretrained(bert_tokenizer)
+        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
+        self.llm_model = AutoModelForCausalLM.from_pretrained(
+            llm_model,
+            device_map="auto",  # 自动分配设备（支持多GPU）
+            torch_dtype=torch.float16  # 使用半精度
+        )
+        self.llm_model = self.llm_model.eval().requires_grad_(False)
 
         # Initialize other components
-        self.PLRS = PLRS.PLRSCalculator(model_path=tokenizer, data_path=data_path, spacy_model=spacy_model)
-        self.CIIS = CIIS.CIISCalculator(self.model, self.tokenizer, lambda_1, lambda_2, alpha, beta, gamma, spacy_model)
-        self.TRS = TRS.TRSCalculator(bert_model=self.tokenizer, llm_model=self.llm_pipeline, k=k)
-        self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_pipeline)
+        self.PLRS = PLRS.PLRSCalculator(
+            self.bert_model, 
+            self.bert_tokenizer,
+            device=self.device,  # 新增设备参数
+            data_path=data_path,
+            spacy_model=spacy_model
+        )
+        
+        self.CIIS = CIIS.CIISCalculator(self.bert_model, self.bert_tokenizer, lambda_1, lambda_2, alpha, beta, gamma, spacy_model)
+
+        self.TRS = TRS.TRSCalculator(bert_tokenizer=self.bert_tokenizer,
+                                      llm_tokenizer=self.llm_tokenizer, 
+                                      llm_model=self.llm_model, device="cuda")
+                                     
+        self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_model_name)
 
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
+        torch.cuda.synchronize()  # 确保计时准确
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        
+        start_event.record()
+
         triple_metrics = self.calculate_part1()
         replacement_dict = self.calculate_part2(triple_metrics)
+        
+
+        end_event.record()
+    
+        torch.cuda.synchronize()
+        elapsed_time = start_event.elapsed_time(end_event) / 1000
+        print(f"Pure compute time: {elapsed_time:.2f} seconds")
+
         self.calculate_part3(replacement_dict, self.data_path)
 
     def calculate_part1(self):
@@ -121,7 +162,7 @@ class ALSA:
         print('\n\033[1;32mPart 2 Completed\033[0m')
         return words_metrics
 
-    def calculate_part3(self, part2_output):
+    def calculate_part3(self, part2_output, data_path):
         """
         Ultimate Replacement Logic: Precise Replacement Based on (word, sentence)
         :param part2_output: Dictionary structure {(word, sentence): r_word}
@@ -181,12 +222,12 @@ def install_requirements():
     subprocess.check_call([sys.executable, "-m", "pip", "install", "transformers", "pandas", "spacy", "datasets"])
 
 if __name__ == "__main__":
-    install_requirements()
+    # install_requirements()
 
     parser = argparse.ArgumentParser(description='Run ALSA Text Analysis')
     parser.add_argument('--data_path', type=str, default="data/ALSA.csv", help='Path to CSV dataset or HuggingFace dataset')
     parser.add_argument('--bert_model', type=str, default="bert-base-uncased", help='BERT model')
-    parser.add_argument('--llm_model', type=str, default="decapoda-research/llama-7b-hf", help='Llama model')
+    parser.add_argument('--llm_model', type=str, default="meta-llama/Llama-2-7b-chat-hf", help='Llama model')
     parser.add_argument('--k_means', type=int, default=8, help='K-means clustering parameter')
     parser.add_argument('--lambda_1', type=float, default=0.4, help='Lambda 1 for CIIS')
     parser.add_argument('--lambda_2', type=float, default=0.6, help='Lambda 2 for CIIS')
@@ -194,15 +235,15 @@ if __name__ == "__main__":
     parser.add_argument('--beta', type=float, default=0.5, help='Beta parameter for CASM')
     parser.add_argument('--gamma', type=float, default=0.3, help='Gamma parameter for CASM')
     parser.add_argument('--spacy_model', type=str, default="en_core_web_sm", help='spaCy model')
-    parser.add_argument('--k', type=int, default=5, help='K-th iteration in the TRS')
-    parser.add_argument('--output_path', type=str, default="output.txt", help='Path to save the output')
+    parser.add_argument('--output_path', type=str, default="output.txt", help='Path to save the output file')
     
     args = parser.parse_args()
 
     alsa = ALSA(
-        model=args.llm_model, 
-        tokenizer=args.bert_model, 
+        bert_model=args.bert_model, 
+        bert_tokenizer=args.bert_model, 
         data_path=args.data_path,
+        output_path=args.output_path,
         llm_model=args.llm_model,
         k_means=args.k_means,
         lambda_1=args.lambda_1,
@@ -210,10 +251,15 @@ if __name__ == "__main__":
         alpha=args.alpha,
         beta=args.beta,
         gamma=args.gamma,
-        spacy_model=args.spacy_model,
-        k=args.k,
-        output_path=args.output_path
+        spacy_model=args.spacy_model
     )
+
+    start_time = time.time()
+
     alsa.calculate()
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Total elapsed time: {elapsed_time:.2f} seconds")
 
     print("\n\033[1;32mALL COMPLETED\033[0m")

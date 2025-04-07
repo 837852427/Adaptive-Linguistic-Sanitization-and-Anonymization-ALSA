@@ -2,7 +2,6 @@ import CCCalculator as cc
 import SDCalculator as sd
 from transformers import BertTokenizer, BertModel
 import pandas as pd
-import numpy as np
 
 class CIISCalculator:
     def __init__(self, model, tokenizer, lambda_1 = 0.4, lambda_2 = 0.6, alpha = 0.8, beta = 0.5, gamma = 0.3, space_model = "en_core_web_sm"):
@@ -87,10 +86,10 @@ class CIISCalculator:
         return sentences
 
 if __name__ == "__main__":
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = BertModel.from_pretrained("bert-base-uncased")
-    ciis_calculator = CIISCalculator(model, tokenizer)
-    csv_path = "ALSA/test.csv"
+    tokenizer = "bert-base-uncased"
+    model = "bert-base-uncased"
+    ciis_calculator = CIISCalculator(BertModel.from_pretrained(model), BertTokenizer.from_pretrained(tokenizer))
+    csv_path = "data/ALSA.csv"
     ciis_scores = ciis_calculator.calculate(csv_path)
     for (word, sentence), score in ciis_scores.items():
-        print(f'\n{word} from "{sentence}" and score is {score}')
+        print(f'{word} from "{sentence}" and score is {score}')

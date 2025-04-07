@@ -3,18 +3,22 @@ import spacy
 import pandas as pd
 import inflect
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import random
 
 class TRSCalculator:
-    def __init__(self, bert_model="bert-base-uncased", llm_model="gpt2", k=5):
+    def __init__(self, bert_tokenizer, llm_tokenizer, llm_model, device="cuda"):
         """Initialize tokenization components with same configuration as TRS"""
-        self.nlp = spacy.load("en_core_web_sm")
-        self.bert_tokenizer = AutoTokenizer.from_pretrained(bert_model)
-        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
-        self.llm_model = AutoModelForCausalLM.from_pretrained(llm_model)
-        self.llm_tokenizer.pad_token = self.llm_tokenizer.eos_token
-        self.k = k
+        self.device = device
 
-    def calculate(self, csv_path):
+        # python -m spacy download en_core_web_sm
+        self.nlp = spacy.load("en_core_web_sm")
+        self.bert_tokenizer = bert_tokenizer
+        
+        self.llm_tokenizer = llm_tokenizer
+        self.llm_model = llm_model.to(self.device)
+        self.llm_tokenizer.pad_token = self.llm_tokenizer.eos_token
+
+    def calculate(self, csv_path, k=5):
         """
         Main calculation interface following TRS's design
         """
@@ -29,7 +33,7 @@ class TRSCalculator:
         print("\n\033[1mCalculating TRS...\033[0m")
 
         for sentence, task in zip(sentences, task_prompts):
-            word_scores = self.calculate_TRS(sentence, task, self.k)
+            word_scores = self.calculate_TRS(sentence, task, k)
             for word, score in word_scores.items():
                 trs_scores[(word, sentence)] = score
                 
@@ -107,30 +111,31 @@ class TRSCalculator:
         """
         Prompt generation following CIIS's response pattern
         """
-        prompt = f"""Evaluate task relevance of specific terms:
-Text: {text}
-Task: {task}
-
-Scoring rules:
-1. Score format: "term":X.X (X.X ranges 0.1-1.0, allows decimals like 0.5, 0.75, 0.833)
-2. Strictly maintain original casing (e.g. 'iPhone' must stay as 'iPhone')
-3. Must include all terms: {", ".join(target_words)}
-
-Examples:
-"Credit":0.8
-"Bank":0.92
-"Loan":0.6667
-
-Output:\n"""
-        inputs = self.llm_tokenizer(prompt, 
-                                  return_tensors="pt", 
-                                  max_length=1024,
-                                  truncation=True)
+        example = "\n".join([f'"{word}": {round(random.uniform(0, 1), 4):.4f}' 
+                       for word in ["Credit", "Bank", "Loan"]])
+    
+        prompt = f"""Generate per-word scores (one per line) following these rules:
+    1. Output format: "word":X.XXXX (0.0000~1.0000)
+    2. Strictly maintain original word casing
+    3. Include all words: {", ".join(target_words)}
+    4. No additional explanations
+    Example:
+    {example}
+    Generate for these words: {", ".join(target_words)}
+    Output:\n"""
+        
+        inputs = self.llm_tokenizer(
+            prompt, 
+            return_tensors="pt",
+            max_length=1024,
+            truncation=True
+        ).to(self.device)
         outputs = self.llm_model.generate(
-            inputs.input_ids.to(self.llm_model.device),
-            max_new_tokens=200,
-            temperature=0.3,
-            do_sample=True
+            inputs.input_ids,
+            max_new_tokens=300,
+            temperature=0.7,
+            do_sample=True,
+            pad_token_id=self.llm_tokenizer.eos_token_id
         )
         return self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
 
@@ -158,7 +163,11 @@ Output:\n"""
 
 if __name__ == "__main__":
     # Test case (following CIIS's main design)
-    trs_calc = TRSCalculator(llm_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    bert_model = "bert-base-uncased"
+    llm_model = "gpt2"
+    trs_calc = TRSCalculator(AutoTokenizer.from_pretrained(bert_model),
+                             AutoTokenizer.from_pretrained(llm_model),
+                             AutoModelForCausalLM.from_pretrained(llm_model))
     
     # Create test CSV
     test_data = {

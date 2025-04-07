@@ -56,9 +56,11 @@ class CCCalculator:
         Returns: 4D tensor (num_words x num_words x dim x dim)
         """
         device = self.model.device  # Get model device
+        dtype = next(self.model.parameters()).dtype  # Get model dtype
+
         num_words = len(pos_tags)
         D = torch.zeros((num_words, num_words, embedding_dim, embedding_dim), 
-                    device=device, dtype=torch.float32)
+                device=device, dtype=dtype)
         
         for i in range(num_words):
             for j in range(num_words):
@@ -69,7 +71,7 @@ class CCCalculator:
                 rho_j = 1.0 if self.is_content_word(pos_j) else self.gamma
                 
                 # Create identity matrix with PyTorch
-                D[i, j] = rho_i * rho_j * torch.eye(embedding_dim, device=device, dtype=torch.float32)
+                D[i, j] = rho_i * rho_j * torch.eye(embedding_dim, device=device, dtype=dtype)
         
         return D
 
@@ -85,19 +87,29 @@ class CCCalculator:
         Compute Mahalanobis distance using PyTorch operations
         Returns: scalar distance value
         """
+        device = v_i.device
+        dtype = v_i.dtype
+
+        # Convert D_ij to tensor if needed
+        if isinstance(D_ij, np.ndarray):
+            D_ij = torch.from_numpy(D_ij).to(device=device, dtype=dtype)  # 修改1：使用动态类型
+        else:
+            D_ij = D_ij.to(device=device, dtype=dtype)
+
         # Ensure 2D tensor inputs [1, hidden_size]
         v_i = v_i.unsqueeze(0) if v_i.dim() == 1 else v_i
         v_j = v_j.unsqueeze(0) if v_j.dim() == 1 else v_j
         
-        # Convert D_ij to tensor if needed
-        if isinstance(D_ij, np.ndarray):
-            D_ij = torch.from_numpy(D_ij).to(device=v_i.device, dtype=torch.float32)
-        
         # Compute Q matrix
-        Q_ij = torch.eye(v_i.size(-1), device=v_i.device) + alpha * D_ij
+        Q_ij = torch.eye(v_i.size(-1), device=device, dtype=dtype) + alpha * D_ij
         
         # Calculate difference vector
         diff = v_i - v_j
+
+        if diff.dtype != Q_ij.dtype:
+            # Ensure both tensors are of the same type
+            diff = diff.to(torch.float32)
+            Q_ij = Q_ij.to(torch.float32)
         
         # Matrix operations
         product = torch.matmul(diff, torch.matmul(Q_ij, diff.T))  # [1,1]
