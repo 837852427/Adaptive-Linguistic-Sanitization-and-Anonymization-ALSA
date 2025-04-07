@@ -2,9 +2,10 @@ import CCCalculator as cc
 import SDCalculator as sd
 from transformers import BertTokenizer, BertModel
 import pandas as pd
+import spacy
 
 class CIISCalculator:
-    def __init__(self, model, tokenizer, lambda_1 = 0.4, lambda_2 = 0.6, alpha = 0.8, beta = 0.5, gamma = 0.3, space_model = "en_core_web_sm"):
+    def __init__(self, model, tokenizer, lambda_1 = 0.4, lambda_2 = 0.6, alpha = 0.8, beta = 0.5, gamma = 0.3, spacy_model = "en_core_web_sm"):
         self.model = model
         self.tokenizer = tokenizer
         self.lambda_1 = lambda_1
@@ -12,9 +13,11 @@ class CIISCalculator:
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
-        self.space_model = space_model
-        self.cc_calculator = cc.CCCalculator(self.model, self.tokenizer, self.alpha, self.beta, self.gamma, self.space_model)
-        self.sd_calculator = sd.SDCalculator(self.model, self.tokenizer)
+        self.spacy_model = spacy_model
+        self.nlp = spacy.load(spacy_model)
+        self.cc_calculator = cc.CCCalculator(self.model, self.tokenizer, self.alpha, self.beta, self.gamma, self.nlp)
+        self.sd_calculator = sd.SDCalculator(self.model, self.tokenizer, self.nlp)
+        
 
 
     def calculate(self, csv_path):

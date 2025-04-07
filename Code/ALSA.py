@@ -91,21 +91,10 @@ class ALSA:
 
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
-        torch.cuda.synchronize()  # 确保计时准确
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
-        
-        start_event.record()
 
         triple_metrics = self.calculate_part1()
         replacement_dict = self.calculate_part2(triple_metrics)
         
-
-        end_event.record()
-    
-        torch.cuda.synchronize()
-        elapsed_time = start_event.elapsed_time(end_event) / 1000
-        print(f"Pure compute time: {elapsed_time:.2f} seconds")
 
         self.calculate_part3(replacement_dict, self.data_path)
 
@@ -114,16 +103,31 @@ class ALSA:
         print('\033[1;32mStarting Part 1 Calculations...\033[0m')
 
         # PLRS Calculation
+        start_time = time.time()
+
         PLRS_metrics = self.PLRS.calculate()
         print(f'\nPLRS Results:\n{PLRS_metrics}')
+
+        end_time = time.time()
+        print(f"PLRS calculation time: {end_time - start_time:.2f} seconds")
         
         # CIIS Calculation
+        start_time = time.time()
+
         CIIS_metrics = self.CIIS.calculate(self.data_path)
         print(f'\nCIIS Results:\n{CIIS_metrics}')
+
+        end_time = time.time()
+        print(f"CIIS calculation time: {end_time - start_time:.2f} seconds")
         
         # TRS Calculation
+        start_time = time.time()
+
         TRS_metrics = self.TRS.calculate(self.data_path)
         print(f'\nTRS Results:\n{TRS_metrics}')
+
+        end_time = time.time()
+        print(f"TRS calculation time: {end_time - start_time:.2f} seconds")
         
         
         # CASM Aggregation

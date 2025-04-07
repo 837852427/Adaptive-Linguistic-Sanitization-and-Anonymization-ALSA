@@ -5,11 +5,11 @@ import pandas as pd
 from transformers import BertModel, BertTokenizer
 
 class CCCalculator:
-    def __init__(self, model, tokenizer, alpha=0.5, beta=0.5, gamma=0.3, spacy_model="en_core_web_sm"):
+    def __init__(self, model, tokenizer, alpha=0.5, beta=0.5, gamma=0.3, nlp=spacy.load("en_core_web_sm")):
         self.model = model
         self.tokenizer = tokenizer
         self.gamma = gamma  # Weight constant for function words
-        self.nlp = spacy.load(spacy_model)  # Load spaCy model for POS tagging and parsing
+        self.nlp = nlp  # Load spaCy model for POS tagging and parsing
         self.alpha = alpha
         self.beta = beta
 

@@ -6,10 +6,10 @@ from nltk.corpus import wordnet as wn
 # nltk.download('wordnet')
 
 class SDCalculator:
-    def __init__(self, model, tokenizer, spacy_model="en_core_web_sm"):
+    def __init__(self, model, tokenizer, nlp=spacy.load("en_core_web_sm")):
         self.model = model
         self.tokenizer = tokenizer
-        self.nlp = spacy.load(spacy_model)  # Load spaCy model for POS tagging and dependency parsing
+        self.nlp = nlp  # Load spaCy model for POS tagging and dependency parsing
 
     def calculate_sd(self, sentence):
         pos_tags = self.get_pos_tags_spacy(sentence)
