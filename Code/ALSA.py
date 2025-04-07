@@ -11,6 +11,7 @@ import TRS
 import CASM
 import torch
 from datasets import load_dataset
+from transformers import BitsAndBytesConfig
 
 import time
 
@@ -47,6 +48,7 @@ class ALSA:
             self.dataset = pd.DataFrame(dataset["train"])  # You can change this depending on the dataset split
         else:
             self.dataset = pd.read_csv(data_path)
+    
         
         self.data_path = data_path
         self.output_path = output_path
@@ -60,8 +62,8 @@ class ALSA:
 
         self.bert_model = BertModel.from_pretrained(bert_model).to(self.device)
         if self.device.type == 'cuda':
-            self.bert_model = self.bert_model.half()  # 使用半精度
-            torch.backends.cudnn.benchmark = True  # 启用cuDNN优化
+            self.bert_model = self.bert_model.half()  # 仅保留半精度转换
+            torch.backends.cudnn.benchmark = True  # 优化CUDA性能
 
         self.bert_tokenizer = BertTokenizer.from_pretrained(bert_tokenizer)
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
