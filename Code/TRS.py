@@ -178,7 +178,7 @@ class TRSCalculator:
         with torch.no_grad():
             outputs = self.llm_model.generate(
                 inputs.input_ids,
-                max_new_tokens=150,  # 缩短生成长度
+                max_new_tokens=50,  # 缩短生成长度
                 temperature=0.7,
                 do_sample=True,
                 num_return_sequences=k,  # 关键参数：批量生成数量

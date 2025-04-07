@@ -14,55 +14,41 @@ class CCCalculator:
         self.beta = beta
 
     def calculate_cc(self, sentence):
-        """修复数据类型后的向量化计算"""
+        """
+        Calculate Contextual Coherence (CC) scores for words in a sentence
+        Combines semantic and positional relationships
+        """
         pos_tags = self.get_pos_tags_spacy(sentence)
         words, word_embeddings = self.get_words_embedding(sentence, pos_tags)
-        
-        # 确保embeddings为半精度
-        if word_embeddings.dtype != torch.float16:
-            word_embeddings = word_embeddings.half()
-        
-        n, dim = word_embeddings.shape
-        device = word_embeddings.device
 
-        # 生成rho张量（半精度）
-        rho = torch.tensor(
-            [1.0 if self.is_content_word(tag) else self.gamma for _, tag in pos_tags],
-            device=device,
-            dtype=torch.float16  # 强制半精度
-        )
+        # Calculate dependency relationship matrix
+        D = self.calculate_D_matrix(pos_tags)
 
-        # 生成D矩阵（半精度）
-        identity = torch.eye(dim, device=device, dtype=torch.float16)  # 显式指定半精度
-        D = torch.einsum('i,j,kl->ijkl', rho, rho, identity)  # [n, n, dim, dim]
+        # Compute pairwise Mahalanobis distances
+        T = np.zeros((len(pos_tags), len(pos_tags)))
+        for i, v_i in enumerate(word_embeddings):
+            for j, v_j in enumerate(word_embeddings):
+                if i != j:
+                    T[i, j] = self.calculate_mahalanobis_distance(v_i, v_j, D[i, j], self.alpha)
 
-        # 计算Q矩阵（保持半精度）
-        Q_base = torch.eye(dim, device=device, dtype=torch.float16).reshape(1,1,dim,dim)
-        Q = Q_base + (self.alpha * D).half()  # 确保运算保持半精度
+        # Compute positional distance matrix
+        R = np.zeros((len(pos_tags), len(pos_tags)))
+        for i in range(len(pos_tags)):
+            for j in range(len(pos_tags)):
+                if i != j:
+                    R[i, j] = abs(i - j)
 
-        # 计算差值矩阵
-        diff = word_embeddings.unsqueeze(1) - word_embeddings.unsqueeze(0)  # [n, n, dim]
-        diff_expanded = diff.unsqueeze(-1).half()  # [n, n, dim, 1]
+        # Final CC score calculation
+        cc_scores = {}
+        epsilon = 1e-9  # Prevent division by zero
+        for i, (word, _) in enumerate(pos_tags):
+            sum = 0
+            for j in range(len(pos_tags)):
+                if i != j:
+                    sum += self.beta * R[i, j] + T[i, j] + epsilon
+            cc_scores[word] = 1 / sum
 
-        # 爱因斯坦求和（全半精度环境）
-        product = torch.einsum('abcd,abde,abce->ab', 
-                            Q.to(torch.float16), 
-                            diff_expanded.to(torch.float16), 
-                            diff_expanded.to(torch.float16))
-        
-        # 聚合计算结果
-        T = torch.sqrt(product.sum(dim=1))  # [n]
-        
-        # 位置矩阵计算（保持半精度）
-        positions = torch.arange(n, device=device, dtype=torch.float16)
-        R = torch.abs(positions.unsqueeze(1) - positions.unsqueeze(0))
-        
-        # 最终分数计算
-        sum_matrix = (self.beta * R) + T
-        cc_scores = 1 / sum_matrix
-        
-        return {word: cc_scores[i].item() for i, word in enumerate(words)}
-
+        return cc_scores
     
     def calculate_D_matrix(self, pos_tags, embedding_dim=768):
         """
