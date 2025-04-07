@@ -4,6 +4,8 @@ from transformers import BertTokenizer, BertModel
 import pandas as pd
 import spacy
 
+import torch
+
 class CIISCalculator:
     def __init__(self, model, tokenizer, lambda_1 = 0.4, lambda_2 = 0.6, alpha = 0.8, beta = 0.5, gamma = 0.3, spacy_model = "en_core_web_sm"):
         self.model = model
@@ -71,13 +73,14 @@ class CIISCalculator:
             print(f'cc_scores.type: {type(cc_scores)}    cc_scores.shape: {len(cc_scores)}')
         
         # Merge SD and CC
-        for word in cc_scores:
-            if __name__ == "__main__":
-                print(f'word: {word}, cc_scores[word]: {cc_scores[word]}, sd_scores[word]: {sd_scores[word]}')
-            
-            ciis_scores[(word, sentence)] = self.lambda_1 * cc_scores[word] + self.lambda_2 * sd_scores[word]
+        words = list(cc_scores.keys())
+        cc_values = torch.tensor([cc_scores[word] for word in words], device='cuda')
+        sd_values = torch.tensor([sd_scores[word] for word in words], device='cuda')
+        # GPU并行计算
+        ciis_values = self.lambda_1 * cc_values + self.lambda_2 * sd_values
         
-        return ciis_scores
+        return {(word, sentence): ciis_values[i].item() 
+              for i, word in enumerate(words)}
 
     def input_sentence(self, csv_path):
         """

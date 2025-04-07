@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import torch
 import spacy
+from torch.cuda.amp import autocast
 
 class IsolationTree:
     def __init__(self, height_limit, current_height=0):
@@ -156,14 +157,17 @@ class PLRSCalculator:
         3. Handle multi-token words by averaging subword embeddings
         Returns: 768-dimensional numpy array
         """
+        
         inputs = self.tokenizer(
             word, 
             return_tensors="pt",
             padding=True,
             truncation=True
         ).to(self.device)
+
         with torch.no_grad():
             outputs = self.model(**inputs)
+            
         token_embeddings = outputs.last_hidden_state[0]  # (sequence_length, hidden_size)
         if token_embeddings.shape[0] > 2:
             embedding = token_embeddings[1:-1].mean(dim=0)

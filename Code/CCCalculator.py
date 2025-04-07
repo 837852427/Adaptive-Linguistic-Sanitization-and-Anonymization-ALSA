@@ -134,7 +134,9 @@ class CCCalculator:
         inputs = self.tokenizer(sentence, return_tensors="pt", padding=True, truncation=True, max_length=512).to(self.model.device)
         
         with torch.no_grad():
-            outputs = self.model(**inputs, output_hidden_states=True)
+            outputs = self.model(**inputs, 
+            max_new_tokens=50,  # 缩短生成长度,
+            output_hidden_states=True)
         
         # Extract embeddings and tokens
         embeddings = outputs.hidden_states[-1].squeeze(0)
