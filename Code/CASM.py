@@ -4,7 +4,7 @@ import nltk
 from nltk.corpus import wordnet as wn
 import random
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
 # Download the WordNet corpus
@@ -68,14 +68,17 @@ class CASMCalculator:
     def action_encrypt(self, words):
         """ Word Replacement"""
         def get_diff_word(word):
-            prompt = f"Give a different English word than '{word}':"
+            prompt = f"Provide an alternative word for '{word}' that obscures its original meaning."
             try:
                 input_ids = self.llm_tokenizer(prompt, return_tensors="pt").input_ids.to(self.llm_model.device)
                 with torch.cuda.amp.autocast(dtype=torch.float16):
                     output = self.llm_model.generate(input_ids, **self.gen_kwargs)
-                text = self.llm_tokenizer.decode(output[0], skip_special_tokens=True)
-                result = text.split()[-1].lower() if text else word
-                return result if result != word else f"{word}_alt"
+                text = self.llm_tokenizer.decode(output[0], skip_special_tokens=True).strip()
+                # 从生成的文本中取最后一个单词作为替换
+                result = text.split()[-1] if text.split() else ""
+                if not result or result.lower() == word.lower():
+                    result = f"{word}_alt"
+                return result.capitalize() if word[0].isupper() else result.lower()
             except Exception:
                 return f"{word}_alt"
 
@@ -155,8 +158,8 @@ class CASMCalculator:
                 print(f"\033[1;31mNo matching action for {word}\033[0m")
                 print(f"Centroid: {centroid}, Metrics: {word_metrics[word]}")
                 sys.exit(1)
-
-        # print(f'Retain: {Retain_set}\nReplace: {Replace_set}\nEncrypt: {Encrypt_set}\nDelete: {Delte_set}\n')
+        if __name__ == "__main__":
+            print(f'Retain: {Retain_set}\nReplace: {Replace_set}\nEncrypt: {Encrypt_set}\nDelete: {Delte_set}\n')
 
         return Retain_set, Replace_set, Encrypt_set, Delte_set
     
@@ -197,7 +200,13 @@ class CASMCalculator:
         return random.choice(list(synonyms)) if synonyms else word
     
 if __name__ == "__main__":
-    # Example usage
+    """
+    测试用例说明  
+    - Retain  : 低 PLRS + 高 CIIS + 低 TRS  →  (0.10, 0.80, 0.20)
+    - Replace : 高 PLRS + 低 CIIS + 高 TRS  →  (0.85, 0.20, 0.90)
+    - Encrypt : 高 PLRS + 高 CIIS + 低 TRS  →  (0.90, 0.85, 0.10)
+    - Delete  : 低 PLRS + 低 CIIS + 低 TRS  →  (0.05, 0.10, 0.05)
+    """
     word_metrics = {
         ('Jon', 'Jon applied for a loan using his credit card.'): [0.1, 0.89, 0.2],
         ('applied', 'Jon applied for a loan using his credit card.'): [0.8, 0.1, 0.9],
@@ -209,11 +218,17 @@ if __name__ == "__main__":
         ('credit', 'Jon applied for a loan using his credit card.'): [0.0, 0.0, 0.0],
         ('card', 'Jon applied for a loan using his credit card.'): [0.18, 0.8, 0.8],
     }
-
-    casm = CASMCalculator(k=2)
+    name = "meta-llama/Llama-2-7b-chat-hf"
+    llm_model = llm_model = AutoModelForCausalLM.from_pretrained(
+        name,
+        device_map="auto",  # 自动分配设备（支持多GPU）
+        torch_dtype=torch.float16  # 使用半精度
+    )
+    llm_model = llm_model.eval().requires_grad_(False)
+    casm = CASMCalculator(k=4, llm_model=llm_model)  # 替换为已加载的模型实例亦可
     actions = casm.calculate(word_metrics)
 
     print("\n\033[1mCASM Actions:\033[0m")
-    print(f'\nwords_replace:\n{actions}\n')
-    for word, action in actions.items():
-        print(f"{word}: {action}")
+    for (word, sent), new_word in actions.items():
+        print(f"{word:<10} -> {new_word:<15} | {sent}")
+

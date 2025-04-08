@@ -1,3 +1,21 @@
 sentence,task_prompt
-Jon applied for a loan using his credit card.,Identify financial-related word
-The quick brown fox jumps over the lazy dog.,Describe the actions of the fox and the dog in the sentence.
+The diligent student solves complex equations effortlessly.,Identify the action performed by the student in the sentence.
+A gentle breeze rustles the autumn leaves along the path.,Describe what the breeze does to the leaves.
+The chef slices fresh vegetables with remarkable speed.,Identify the action of the chef in the sentence.
+Bright stars illuminate the quiet night sky above the valley.,Describe what the stars do in the sentence.
+The determined runner sprints past the finish line in triumph.,Identify the action of the runner in the sentence.
+Morning sunlight warms the sleepy village by the river.,Describe the effect of the sunlight on the village.
+A graceful swan glides across the still lake at dawn.,Identify the action of the swan in the sentence.
+Heavy rain pounds the city streets during the storm.,Describe what the rain does to the streets.
+The curious child opens the mysterious box with excitement.,Identify the action of the child in the sentence.
+Gentle waves lap against the sandy shore at sunset.,Describe the action of the waves in the sentence.
+The skilled artist paints a vibrant landscape on the canvas.,Identify the action of the artist in the sentence.
+A lone owl hoots softly from the tall oak tree.,Describe the action of the owl in the sentence.
+The energetic puppy chases its tail in endless circles.,Identify the action of the puppy in the sentence.
+Golden leaves blanket the forest floor in early autumn.,Describe what the leaves do in the sentence.
+The brave firefighter rescues a kitten from the burning house.,Identify the action of the firefighter in the sentence.
+Soft music drifts through the open window of the café.,Describe what the music does in the sentence.
+The anxious traveler checks his watch at the crowded station.,Identify the action of the traveler in the sentence.
+Fresh snow covers the mountain peaks after the storm.,Describe what the snow does to the peaks.
+The seasoned sailor steers the ship through turbulent waters.,Identify the action of the sailor in the sentence.
+Warm candles illuminate the cozy room on a winter night.,Describe the effect of the candles in the sentence.
