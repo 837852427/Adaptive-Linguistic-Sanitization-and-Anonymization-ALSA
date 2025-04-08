@@ -21,7 +21,6 @@ class CASMCalculator:
         :param k: Number of clusters for k-means
         """
         self.k = k
-        # 如果外部传入已加载的 LLM (HF AutoModelForCausalLM)，就复用；否则懒加载
         if llm_model is None:
             raise ValueError("llm_model 不能为 None，需传入已加载好的 LLM 实例")
         self.llm_model = llm_model
@@ -66,7 +65,7 @@ class CASMCalculator:
         return replace_words
 
     def action_encrypt(self, words):
-        """ Word Replacement"""
+        """Word Replacement: 对每个单词生成替代词，如果生成无效则直接替换为 "*"."""
         def get_diff_word(word):
             prompt = f"Provide an alternative word for '{word}' that obscures its original meaning."
             try:
@@ -74,15 +73,15 @@ class CASMCalculator:
                 with torch.cuda.amp.autocast(dtype=torch.float16):
                     output = self.llm_model.generate(input_ids, **self.gen_kwargs)
                 text = self.llm_tokenizer.decode(output[0], skip_special_tokens=True).strip()
-                # 从生成的文本中取最后一个单词作为替换
                 result = text.split()[-1] if text.split() else ""
                 if not result or result.lower() == word.lower():
-                    result = f"{word}_alt"
-                return result.capitalize() if word[0].isupper() else result.lower()
+                    result = "*"
+                return result if result == "*" else (result.capitalize() if word[0].isupper() else result.lower())
             except Exception:
-                return f"{word}_alt"
+                return "*"
 
         return {(word, sentence): get_diff_word(word) for (word, sentence) in words}
+
 
     def action_delete(self, words):
         """Remove words from text"""
@@ -104,19 +103,18 @@ class CASMCalculator:
 
         # Perform k-means clustering
         vec = torch.tensor([v for v in word_metrics.values()],
-                           device="cuda", dtype=torch.float32)          # [N,3]
+                           device="cuda", dtype=torch.float32)        
 
-        # 初始化中心 = 前 k 个样本；若词数 < k，重复取
         if vec.size(0) < self.k:
             repeat = self.k - vec.size(0)
             vec_init = torch.cat([vec, vec[:repeat]], dim=0)
         else:
             vec_init = vec[: self.k].clone()
 
-        centroids = vec_init                                                    # [k,3]
-        for _ in range(10):                # 10 次迭代足够收敛
-            dist = torch.cdist(vec, centroids)          # [N,k]
-            clusters = dist.argmin(dim=1)               # [N]
+        centroids = vec_init                                              
+        for _ in range(10):               
+            dist = torch.cdist(vec, centroids)       
+            clusters = dist.argmin(dim=1)             
             for cid in range(self.k):
                 mask = clusters == cid
                 if mask.any():
@@ -200,13 +198,6 @@ class CASMCalculator:
         return random.choice(list(synonyms)) if synonyms else word
     
 if __name__ == "__main__":
-    """
-    测试用例说明  
-    - Retain  : 低 PLRS + 高 CIIS + 低 TRS  →  (0.10, 0.80, 0.20)
-    - Replace : 高 PLRS + 低 CIIS + 高 TRS  →  (0.85, 0.20, 0.90)
-    - Encrypt : 高 PLRS + 高 CIIS + 低 TRS  →  (0.90, 0.85, 0.10)
-    - Delete  : 低 PLRS + 低 CIIS + 低 TRS  →  (0.05, 0.10, 0.05)
-    """
     word_metrics = {
         ('Jon', 'Jon applied for a loan using his credit card.'): [0.1, 0.89, 0.2],
         ('applied', 'Jon applied for a loan using his credit card.'): [0.8, 0.1, 0.9],
@@ -221,11 +212,11 @@ if __name__ == "__main__":
     name = "meta-llama/Llama-2-7b-chat-hf"
     llm_model = llm_model = AutoModelForCausalLM.from_pretrained(
         name,
-        device_map="auto",  # 自动分配设备（支持多GPU）
-        torch_dtype=torch.float16  # 使用半精度
+        device_map="auto",
+        torch_dtype=torch.float16  
     )
     llm_model = llm_model.eval().requires_grad_(False)
-    casm = CASMCalculator(k=4, llm_model=llm_model)  # 替换为已加载的模型实例亦可
+    casm = CASMCalculator(k=8, llm_model=llm_model)  
     actions = casm.calculate(word_metrics)
 
     print("\n\033[1mCASM Actions:\033[0m")

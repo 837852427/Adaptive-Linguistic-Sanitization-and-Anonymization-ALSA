@@ -19,7 +19,7 @@ class CCCalculator:
         GPU‑vectorised CC calculation（无 Python 双循环）
         """
         pos_tags = self.get_pos_tags_spacy(sentence)
-        words, word_emb = self.get_words_embedding(sentence, pos_tags)   # [N,768] on GPU
+        words, word_emb = self.get_words_embedding(sentence, pos_tags) 
         if word_emb.numel() == 0:
             return {w: 0.0 for w, _ in pos_tags}
 
@@ -27,19 +27,17 @@ class CCCalculator:
         device = word_emb.device
         dtype  = word_emb.dtype
 
-        # Mahalanobis 距离
-        Dmat = self.calculate_D_matrix(pos_tags, embedding_dim=dim)      # [N,N,dim,dim]
-        diff = word_emb.unsqueeze(1) - word_emb.unsqueeze(0)             # [N,N,dim]
+        # Mahalanobis 
+        Dmat = self.calculate_D_matrix(pos_tags, embedding_dim=dim)     
+        diff = word_emb.unsqueeze(1) - word_emb.unsqueeze(0)             
         Q    = torch.eye(dim, device=device, dtype=dtype) + self.alpha * Dmat
-        diff_col = diff.unsqueeze(-1)                    # [N,N,dim,1]
-        mah_sq   = torch.matmul(torch.matmul(diff.unsqueeze(-2), Q), diff_col)  # [N,N,1,1]
-        mah      = mah_sq.squeeze(-1).squeeze(-1).clamp(min=1e-9).sqrt()        # [N,N]
+        diff_col = diff.unsqueeze(-1)                   
+        mah_sq   = torch.matmul(torch.matmul(diff.unsqueeze(-2), Q), diff_col)  
+        mah      = mah_sq.squeeze(-1).squeeze(-1).clamp(min=1e-9).sqrt()        
 
-        # 位置距离
         idx = torch.arange(N, device=device, dtype=dtype)
         R   = (idx.unsqueeze(0) - idx.unsqueeze(1)).abs()
 
-        # CC 分数
         sum_mat = self.beta * R + mah + 1e-9
         inv_sum = 1.0 / sum_mat.sum(dim=1)
 

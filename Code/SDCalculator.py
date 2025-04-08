@@ -24,7 +24,7 @@ class SDCalculator:
         sd_scores = {}
         
         batch_sents = []
-        meta = []            # 记录 word_idx
+        meta = []            
 
         for i, word in enumerate(words):
             syns = self.get_valid_synonyms(word)[:max_syn]
@@ -37,7 +37,6 @@ class SDCalculator:
         if not batch_sents:
             return {w: 0.0 for w in words}
 
-        # ---- 一次性 BERT 前向 ----
         inputs = self.tokenizer(batch_sents, return_tensors="pt",
                                 padding=True, truncation=True,
                                 max_length=512).to(self.model.device)

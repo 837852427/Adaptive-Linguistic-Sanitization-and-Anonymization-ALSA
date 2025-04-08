@@ -67,15 +67,15 @@ class ALSA:
         ).to(self.device) 
 
         if self.device.type == 'cuda':
-            self.bert_model = self.bert_model.half()  # 仅保留半精度转换
-            torch.backends.cudnn.benchmark = True  # 优化CUDA性能
+            self.bert_model = self.bert_model.half()
+            torch.backends.cudnn.benchmark = True 
 
         self.bert_tokenizer = BertTokenizer.from_pretrained(bert_tokenizer)
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
         self.llm_model = AutoModelForCausalLM.from_pretrained(
             llm_model,
-            device_map="auto",  # 自动分配设备（支持多GPU）
-            torch_dtype=torch.float16  # 使用半精度
+            device_map="auto",  
+            torch_dtype=torch.float16  
         )
         self.llm_model = self.llm_model.eval().requires_grad_(False)
 
@@ -83,7 +83,7 @@ class ALSA:
         self.PLRS = PLRS.PLRSCalculator(
             self.bert_model, 
             self.bert_tokenizer,
-            device=self.device,  # 新增设备参数
+            device=self.device,  
             data_path=data_path,
             spacy_model=spacy_model
         )
@@ -135,7 +135,7 @@ class ALSA:
         start_time = time.time()
 
         TRS_metrics = self.TRS.calculate(list(zip(self.sent_list, self.dataset["task_prompt"].tolist())))
-        # print(f'\nTRS Results:\n{TRS_metrics}')
+        print(f'\nTRS Results:\n{TRS_metrics}')
 
         end_time = time.time()
         print(f"TRS calculation time: {end_time - start_time:.2f} seconds")

@@ -139,7 +139,6 @@ class PLRSCalculator:
         if not words:
             return {}
 
-        # ---- 整句前向 ----
         inputs = self.tokenizer(sentence,
                                 return_tensors="pt",
                                 padding=True,
@@ -152,7 +151,6 @@ class PLRSCalculator:
         tokens = self.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
         clean  = [t.replace("##", "").lower() for t in tokens]
 
-        # 对齐每个原词到其首 sub‑token
         emb_list = []
         search = 0
         for w in words:
@@ -166,7 +164,7 @@ class PLRSCalculator:
         if not emb_list:
             return {}
 
-        X = torch.stack(emb_list).cpu().numpy()           # [N,768]
+        X = torch.stack(emb_list).cpu().numpy()          
         trees = build_isolation_forest(X, num_trees=8, sample_size=256)
 
         plrs_scores = {}

@@ -29,7 +29,7 @@ class CIISCalculator:
         print('\n\033[1;32mCIIS module startup...\033[0m')
         print("\n\033[1mInput sentences\033[0m")
 
-        if isinstance(data_or_list, list):          # 直接传句子列表
+        if isinstance(data_or_list, list):       
             sentences = data_or_list
         else:
             sentences = self.input_sentence(data_or_list)
