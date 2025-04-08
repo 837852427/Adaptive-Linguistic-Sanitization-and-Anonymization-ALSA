@@ -8,12 +8,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
 
+
 class TRSCalculator:
     _CACHED_TEMPLATE = None
     _EXAMPLE_CACHE = None
     def __init__(self, bert_tokenizer, llm_tokenizer, llm_model, device="cuda"):
         """Initialize tokenization components with same configuration as TRS"""
         self.device = device
+        self.device = torch.device(device) if isinstance(device, str) else device
+        is_cuda = self.device.type == "cuda"
 
         # python -m spacy download en_core_web_sm
         self.nlp = spacy.load("en_core_web_sm")
@@ -23,16 +26,20 @@ class TRSCalculator:
         self.llm_model = llm_model.to(self.device)
         self.llm_tokenizer.pad_token = self.llm_tokenizer.eos_token
 
-        self.amp_dtype = torch.float16 if 'cuda' in device else torch.float32
+        self.amp_dtype = torch.float16 if is_cuda else torch.float32
+        self._SCORE_RE = re.compile(r'"([^"]+)"\s*:\s*((?:1\.0*|0?\.\d+))')
 
-    def calculate(self, csv_path, k=5):
+    def calculate(self, data_or_path, k=5):
         """
         Main calculation interface following TRS's design
         """
         print('\n\033[1;32mTRS module startup...\033[0m')
         print("\n\033[1mInput sentences\033[0m")
 
-        sentences, task_prompts = self.input_sentence(csv_path)
+        if isinstance(data_or_path, list):            # 直接给 [(sent, prompt)]
+            sentences, task_prompts = zip(*data_or_path)
+        else:
+            sentences, task_prompts = self.input_sentence(data_or_path)
 
         print("\n\033[1mInput sentences completed\033[0m")
 
@@ -49,7 +56,7 @@ class TRSCalculator:
 
         return trs_scores
 
-    def calculate_TRS(self, sentence, task_prompt, k=5):
+    def calculate_TRS(self, sentence, task_prompt, k=1):
         """
         Single sentence calculation following TRS's pattern
         """
@@ -58,17 +65,14 @@ class TRSCalculator:
         # Get token list identical to CIIS processing
         words = self.get_ciis_tokens(sentence)
         relevance_agg = {word: [] for word in words}
-        
-        # Multi-round evaluation aggregation
-        relevance_agg = {word: [] for word in words}
 
         # 批量生成所有响应 (单次调用)
-        with torch.autocast(self.device, dtype=self.amp_dtype):  # 混合精度加速
+        with torch.cuda.amp.autocast(dtype=self.amp_dtype):       # 混合精度加速
             responses = self.generate_evaluation(sentence, task_prompt, words, k=k)
         
         
-        print(f'\nresponse:\n{responses}')
-        print(f'\nrelevance_agg:\n{relevance_agg}')
+        # print(f'\nresponse:\n{responses}')
+        # print(f'\nrelevance_agg:\n{relevance_agg}')
 
         self.batch_parse_responses(responses, relevance_agg)
 
@@ -158,7 +162,7 @@ class TRSCalculator:
             example=example
         )
 
-    def generate_evaluation(self, text, task, target_words, k=5):
+    def generate_evaluation(self, text, task, target_words, k=1):
         """
         Prompt generation following CIIS's response pattern
         """
@@ -167,8 +171,9 @@ class TRSCalculator:
         prompt = self._build_prompt_template(target_words, example)
         
         # 扩展输入批次 (k次生成)
+        prompt_list = [prompt] * k
         inputs = self.llm_tokenizer(
-            [prompt] * k,  # 复制k份prompt
+            prompt_list,  # 复制k份prompt
             return_tensors="pt",
             max_length=1024,
             truncation=True,
@@ -178,7 +183,7 @@ class TRSCalculator:
         with torch.no_grad():
             outputs = self.llm_model.generate(
                 inputs.input_ids,
-                max_new_tokens=50,  # 缩短生成长度
+                max_new_tokens=32,  # 缩短生成长度
                 temperature=0.7,
                 do_sample=True,
                 num_return_sequences=k,  # 关键参数：批量生成数量
@@ -220,7 +225,7 @@ class TRSCalculator:
     def batch_parse_responses(self, responses, result_dict):
         """批量解析优化"""
         # 预编译正则表达式
-        pattern = re.compile(r'"([^"]+)"\s*:\s*((?:1\.0*|0?\.\d+))')
+        pattern = self._SCORE_RE
         
         # 构建词表映射
         original_lower_map = {word.lower(): word for word in result_dict.keys()}
@@ -235,9 +240,9 @@ class TRSCalculator:
                 parsed = future.result()
                 for word, score in parsed:
                     result_dict[word].append(score)
-    def _parse_single_response(self, response, pattern, word_map):
+    def _parse_single_response(self, response, regex, word_map):
         """单响应解析 (线程安全)"""
-        matches = pattern.findall(response)
+        matches = regex.findall(response)
         return [
             (word_map[m[0].lower()], float(m[1]))
             for m in matches if m[0].lower() in word_map

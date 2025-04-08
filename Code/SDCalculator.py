@@ -11,7 +11,7 @@ class SDCalculator:
         self.tokenizer = tokenizer
         self.nlp = nlp  # Load spaCy model for POS tagging and dependency parsing
 
-    def calculate_sd(self, sentence):
+    def calculate_sd(self, sentence, max_syn=3):
         pos_tags = self.get_pos_tags_spacy(sentence)
         words, word_embeddings = self.get_words_embedding(sentence, pos_tags)
         
@@ -23,44 +23,39 @@ class SDCalculator:
         
         sd_scores = {}
         
+        batch_sents = []
+        meta = []            # 记录 word_idx
+
         for i, word in enumerate(words):
-            candidate_synonyms = self.get_valid_synonyms(word)  # Filter valid synonyms
-            semantic_diff_sum = 0.0
-            
-            for synonym in candidate_synonyms:
-                # Perform token-aligned replacement
-                modified_sentence, success = self.replace_with_alignment(
-                    sentence, 
-                    original_token_map[i], 
-                    synonym
-                )
-                if not success:
-                    continue
-                    
-                # Get aligned embeddings after replacement
-                modified_embeddings = self.get_aligned_embeddings(
-                    modified_sentence, 
-                    original_token_map
-                )
-                
-                if modified_embeddings is None:
-                    continue
-                    
-                # Calculate semantic difference
-                semantic_diff = self.calculate_semantic_difference(
-                    word_embeddings[i].unsqueeze(0), 
-                    modified_embeddings[i].unsqueeze(0)
-                )
-                semantic_diff_sum += semantic_diff
-            
-            # Compute final score
-            if len(candidate_synonyms) > 0:
-                sd = semantic_diff_sum / len(candidate_synonyms)
-                sd_scores[word] = round(float(sd), 2)
-            else:
-                sd_scores[word] = 0.0
-        
-        return sd_scores
+            syns = self.get_valid_synonyms(word)[:max_syn]
+            for syn in syns:
+                new_sent, ok = self.replace_with_alignment(sentence, original_token_map[i], syn)
+                if ok:
+                    batch_sents.append(new_sent)
+                    meta.append(i)
+
+        if not batch_sents:
+            return {w: 0.0 for w in words}
+
+        # ---- 一次性 BERT 前向 ----
+        inputs = self.tokenizer(batch_sents, return_tensors="pt",
+                                padding=True, truncation=True,
+                                max_length=512).to(self.model.device)
+        with torch.no_grad():
+            all_emb = self.model(**inputs, output_hidden_states=True).hidden_states[-1]
+
+        sd_sum = [0.0] * len(words)
+        cnt    = [0]   * len(words)
+
+        for b, i_word in enumerate(meta):
+            cur_emb = all_emb[b][original_token_map[i_word]]
+            diff = 1 - torch.nn.functional.cosine_similarity(
+                        word_embeddings[i_word], cur_emb, dim=0).item()
+            sd_sum[i_word] += diff
+            cnt[i_word]    += 1
+
+        return {words[i]: round(sd_sum[i]/cnt[i], 2) if cnt[i] else 0.0
+                for i in range(len(words))}
 
     # Helper methods
     def get_token_positions(self, sentence, target_words):
@@ -104,6 +99,9 @@ class SDCalculator:
 
     def get_valid_synonyms(self, word):
         """Retrieve synonyms present in model's vocabulary"""
+        if not wn._synset_from_pos_and_offset:
+            wn.ensure_loaded()
+            
         synonyms = set()
         for syn in wn.synsets(word):
             for lemma in syn.lemmas():

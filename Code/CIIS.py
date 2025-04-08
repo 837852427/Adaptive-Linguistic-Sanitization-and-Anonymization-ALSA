@@ -22,14 +22,17 @@ class CIISCalculator:
         
 
 
-    def calculate(self, csv_path):
+    def calculate(self, data_or_list):
         """
         Calculate the CIIS scores for each word in a sentence.
         """
         print('\n\033[1;32mCIIS module startup...\033[0m')
         print("\n\033[1mInput sentences\033[0m")
 
-        sentences = self.input_sentence(csv_path)
+        if isinstance(data_or_list, list):          # 直接传句子列表
+            sentences = data_or_list
+        else:
+            sentences = self.input_sentence(data_or_list)
 
         print("\n\033[1mInput sentences completed\033[0m")
 
@@ -53,14 +56,14 @@ class CIISCalculator:
 
         # Calculate the Contextual Coherence (CC)
         cc_scores = self.cc_calculator.calculate_cc(sentence)
-        print(f'\ncc_scores: {cc_scores}')
+        # print(f'\ncc_scores: {cc_scores}')
 
         if __name__ == "__main__":
             print("\033[92m\033[1mCC calculation completed\033[0m\033[22m")
 
         # Calculate the Semantic Difference (SD)
         sd_scores = self.sd_calculator.calculate_sd(sentence)
-        print(f'\nsd_scores: {sd_scores}')
+        # print(f'\nsd_scores: {sd_scores}')
 
         if __name__ == "__main__":
             print("\033[92m\033[1mSD calculation completed\033[0m\033[22m")
@@ -73,9 +76,10 @@ class CIISCalculator:
             print(f'cc_scores.type: {type(cc_scores)}    cc_scores.shape: {len(cc_scores)}')
         
         # Merge SD and CC
+        device = self.model.device
         words = list(cc_scores.keys())
-        cc_values = torch.tensor([cc_scores[word] for word in words], device='cuda')
-        sd_values = torch.tensor([sd_scores[word] for word in words], device='cuda')
+        cc_values = torch.tensor([cc_scores[w] for w in words], device=device, dtype=torch.float16)
+        sd_values = torch.tensor([sd_scores[w] for w in words], device=device, dtype=torch.float16)
         # GPU并行计算
         ciis_values = self.lambda_1 * cc_values + self.lambda_2 * sd_values
         

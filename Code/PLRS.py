@@ -117,11 +117,11 @@ class PLRSCalculator:
 
         return sentences
     
-    def calculate(self):
+    def calculate(self, sentences=None):
 
         print('\n\033[1mCalculating PLRS Metrics\033[0m')
-
-        sentences = self.input_sentence()
+        if sentences is None: 
+            sentences = self.input_sentence()
 
         # Calculate the CIIS scores for each sentence and merge them
         PLRS_scores = {}
@@ -136,18 +136,45 @@ class PLRSCalculator:
     
     def calculate_PLRS(self, sentence):
         words = self.get_words(sentence)
-        embeddings = [self.get_word_embedding(word) for word in words]
-        X = np.stack(embeddings)
+        if not words:
+            return {}
+
+        # ---- 整句前向 ----
+        inputs = self.tokenizer(sentence,
+                                return_tensors="pt",
+                                padding=True,
+                                truncation=True,
+                                max_length=512).to(self.device)
+        with torch.no_grad():
+            hidden = self.model(**inputs,
+                                output_hidden_states=True).hidden_states[-1][0]   # [L,768]
+
+        tokens = self.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
+        clean  = [t.replace("##", "").lower() for t in tokens]
+
+        # 对齐每个原词到其首 sub‑token
+        emb_list = []
+        search = 0
+        for w in words:
+            sub = self.tokenizer.tokenize(w)[0].replace("##", "").lower()
+            for idx in range(search, len(clean)):
+                if clean[idx] == sub:
+                    emb_list.append(hidden[idx])
+                    search = idx + 1
+                    break
+
+        if not emb_list:
+            return {}
+
+        X = torch.stack(emb_list).cpu().numpy()           # [N,768]
         trees = build_isolation_forest(X, num_trees=8, sample_size=256)
-        
-        plrs_scors = {}
-        for i, word in enumerate(words):
-            x = X[i]
-            avg_depth = compute_average_depth(x, trees)
-            os_w = compute_outlier_score(avg_depth, sample_size=256)
-            plrs_scors[(word, sentence)] = os_w
-        
-        return plrs_scors
+
+        plrs_scores = {}
+        for i, w in enumerate(words):
+            avg_depth = compute_average_depth(X[i], trees)
+            plrs_scores[(w, sentence)] = compute_outlier_score(avg_depth, 256)
+
+        return plrs_scores
     
     def get_word_embedding(self, word):
         """

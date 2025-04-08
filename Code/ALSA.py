@@ -11,7 +11,6 @@ import TRS
 import CASM
 import torch
 from datasets import load_dataset
-from transformers import BitsAndBytesConfig
 
 import time
 
@@ -33,7 +32,8 @@ class ALSA:
         :param gamma: CASM parameter
         :param spacy_model: spaCy model for NLP tasks
         """
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda")
+        torch.backends.cuda.matmul.allow_tf32 = True
 
         self.bert_model_name = bert_model
         self.bert_tokenizer_tokenizer = bert_tokenizer
@@ -48,6 +48,7 @@ class ALSA:
             self.dataset = pd.DataFrame(dataset["train"])  # You can change this depending on the dataset split
         else:
             self.dataset = pd.read_csv(data_path)
+            self.sent_list = self.dataset["sentence"].tolist()
     
         
         self.data_path = data_path
@@ -60,7 +61,11 @@ class ALSA:
         self.gamma = gamma
         self.spacy_model = spacy_model
 
-        self.bert_model = BertModel.from_pretrained(bert_model).to(self.device)
+        self.bert_model = BertModel.from_pretrained(
+            bert_model,
+            torch_dtype=torch.float16,
+        ).to(self.device) 
+
         if self.device.type == 'cuda':
             self.bert_model = self.bert_model.half()  # 仅保留半精度转换
             torch.backends.cudnn.benchmark = True  # 优化CUDA性能
@@ -87,18 +92,22 @@ class ALSA:
 
         self.TRS = TRS.TRSCalculator(bert_tokenizer=self.bert_tokenizer,
                                       llm_tokenizer=self.llm_tokenizer, 
-                                      llm_model=self.llm_model, device="cuda")
+                                      llm_model=self.llm_model, device=self.device)
                                      
-        self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_model_name)
+        self.CASM = CASM.CASMCalculator(k=self.k_means, llm_model=self.llm_model)
 
     def calculate(self):
         """Execute complete ALSA analysis pipeline"""
+        with torch.inference_mode(), torch.cuda.amp.autocast(dtype=torch.float16):
+            triple_metrics = self.calculate_part1()
+            replacement_dict = self.calculate_part2(triple_metrics)
+            self.calculate_part3(replacement_dict)
 
-        triple_metrics = self.calculate_part1()
-        replacement_dict = self.calculate_part2(triple_metrics)
+        # triple_metrics = self.calculate_part1()
+        # replacement_dict = self.calculate_part2(triple_metrics)
         
 
-        self.calculate_part3(replacement_dict, self.data_path)
+        # self.calculate_part3(replacement_dict, self.data_path)
 
     def calculate_part1(self):
         """Execute first stage metrics calculation"""
@@ -107,8 +116,8 @@ class ALSA:
         # PLRS Calculation
         start_time = time.time()
 
-        PLRS_metrics = self.PLRS.calculate()
-        print(f'\nPLRS Results:\n{PLRS_metrics}')
+        PLRS_metrics = self.PLRS.calculate(self.sent_list)
+        # print(f'\nPLRS Results:\n{PLRS_metrics}')
 
         end_time = time.time()
         print(f"PLRS calculation time: {end_time - start_time:.2f} seconds")
@@ -116,8 +125,8 @@ class ALSA:
         # CIIS Calculation
         start_time = time.time()
 
-        CIIS_metrics = self.CIIS.calculate(self.data_path)
-        print(f'\nCIIS Results:\n{CIIS_metrics}')
+        CIIS_metrics = self.CIIS.calculate(self.sent_list)
+        # print(f'\nCIIS Results:\n{CIIS_metrics}')
 
         end_time = time.time()
         print(f"CIIS calculation time: {end_time - start_time:.2f} seconds")
@@ -125,8 +134,8 @@ class ALSA:
         # TRS Calculation
         start_time = time.time()
 
-        TRS_metrics = self.TRS.calculate(self.data_path)
-        print(f'\nTRS Results:\n{TRS_metrics}')
+        TRS_metrics = self.TRS.calculate(list(zip(self.sent_list, self.dataset["task_prompt"].tolist())))
+        # print(f'\nTRS Results:\n{TRS_metrics}')
 
         end_time = time.time()
         print(f"TRS calculation time: {end_time - start_time:.2f} seconds")
@@ -152,7 +161,7 @@ class ALSA:
             else:
                 CASM_metrics[key] = [0.0, 0.0, score]
         
-        print(f'\nCASM Aggregation:\n{CASM_metrics}')
+        # print(f'\nCASM Aggregation:\n{CASM_metrics}')
         print('\n\033[1mCASM Aggregation Completed\033[0m')
         print('\n\033[1;32mPart 1 Finished\033[0m')
 
@@ -163,12 +172,12 @@ class ALSA:
         print('\n\033[1;32mStarting Part 2 Calculations...\033[0m')
 
         words_metrics = self.CASM.calculate(triple_metrics)
-        print(f'\nwords_metrics:\n{words_metrics}')
+        # print(f'\nwords_metrics:\n{words_metrics}')
 
         print('\n\033[1;32mPart 2 Completed\033[0m')
         return words_metrics
 
-    def calculate_part3(self, part2_output, data_path):
+    def calculate_part3(self, part2_output):
         """
         Ultimate Replacement Logic: Precise Replacement Based on (word, sentence)
         :param part2_output: Dictionary structure {(word, sentence): r_word}

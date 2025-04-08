@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import pandas as pd
 from transformers import BertModel, BertTokenizer
+import math
 
 class CCCalculator:
     def __init__(self, model, tokenizer, alpha=0.5, beta=0.5, gamma=0.3, nlp=spacy.load("en_core_web_sm")):
@@ -15,40 +16,35 @@ class CCCalculator:
 
     def calculate_cc(self, sentence):
         """
-        Calculate Contextual Coherence (CC) scores for words in a sentence
-        Combines semantic and positional relationships
+        GPU‑vectorised CC calculation（无 Python 双循环）
         """
         pos_tags = self.get_pos_tags_spacy(sentence)
-        words, word_embeddings = self.get_words_embedding(sentence, pos_tags)
+        words, word_emb = self.get_words_embedding(sentence, pos_tags)   # [N,768] on GPU
+        if word_emb.numel() == 0:
+            return {w: 0.0 for w, _ in pos_tags}
 
-        # Calculate dependency relationship matrix
-        D = self.calculate_D_matrix(pos_tags)
+        N, dim = word_emb.shape
+        device = word_emb.device
+        dtype  = word_emb.dtype
 
-        # Compute pairwise Mahalanobis distances
-        T = np.zeros((len(pos_tags), len(pos_tags)))
-        for i, v_i in enumerate(word_embeddings):
-            for j, v_j in enumerate(word_embeddings):
-                if i != j:
-                    T[i, j] = self.calculate_mahalanobis_distance(v_i, v_j, D[i, j], self.alpha)
+        # Mahalanobis 距离
+        Dmat = self.calculate_D_matrix(pos_tags, embedding_dim=dim)      # [N,N,dim,dim]
+        diff = word_emb.unsqueeze(1) - word_emb.unsqueeze(0)             # [N,N,dim]
+        Q    = torch.eye(dim, device=device, dtype=dtype) + self.alpha * Dmat
+        diff_col = diff.unsqueeze(-1)                    # [N,N,dim,1]
+        mah_sq   = torch.matmul(torch.matmul(diff.unsqueeze(-2), Q), diff_col)  # [N,N,1,1]
+        mah      = mah_sq.squeeze(-1).squeeze(-1).clamp(min=1e-9).sqrt()        # [N,N]
 
-        # Compute positional distance matrix
-        R = np.zeros((len(pos_tags), len(pos_tags)))
-        for i in range(len(pos_tags)):
-            for j in range(len(pos_tags)):
-                if i != j:
-                    R[i, j] = abs(i - j)
+        # 位置距离
+        idx = torch.arange(N, device=device, dtype=dtype)
+        R   = (idx.unsqueeze(0) - idx.unsqueeze(1)).abs()
 
-        # Final CC score calculation
-        cc_scores = {}
-        epsilon = 1e-9  # Prevent division by zero
-        for i, (word, _) in enumerate(pos_tags):
-            sum = 0
-            for j in range(len(pos_tags)):
-                if i != j:
-                    sum += self.beta * R[i, j] + T[i, j] + epsilon
-            cc_scores[word] = 1 / sum
+        # CC 分数
+        sum_mat = self.beta * R + mah + 1e-9
+        inv_sum = 1.0 / sum_mat.sum(dim=1)
 
-        return cc_scores
+        return {words[i]: float(inv_sum[i].cpu()) for i in range(N)}
+
     
     def calculate_D_matrix(self, pos_tags, embedding_dim=768):
         """
@@ -82,40 +78,40 @@ class CCCalculator:
         content_pos_tags = ['NN', 'VB', 'JJ', 'RB']  # POS tags for content words
         return pos_tag in content_pos_tags
 
-    def calculate_mahalanobis_distance(self, v_i, v_j, D_ij, alpha=0.5):
-        """
-        Compute Mahalanobis distance using PyTorch operations
-        Returns: scalar distance value
-        """
-        device = v_i.device
-        dtype = v_i.dtype
+    # def calculate_mahalanobis_distance(self, v_i, v_j, D_ij, alpha=0.5):
+    #     """
+    #     Compute Mahalanobis distance using PyTorch operations
+    #     Returns: scalar distance value
+    #     """
+    #     device = v_i.device
+    #     dtype = v_i.dtype
 
-        # Convert D_ij to tensor if needed
-        if isinstance(D_ij, np.ndarray):
-            D_ij = torch.from_numpy(D_ij).to(device=device, dtype=dtype)  # 修改1：使用动态类型
-        else:
-            D_ij = D_ij.to(device=device, dtype=dtype)
+    #     # Convert D_ij to tensor if needed
+    #     if isinstance(D_ij, np.ndarray):
+    #         D_ij = torch.from_numpy(D_ij).to(device=device, dtype=dtype)  # 修改1：使用动态类型
+    #     else:
+    #         D_ij = D_ij.to(device=device, dtype=dtype)
 
-        # Ensure 2D tensor inputs [1, hidden_size]
-        v_i = v_i.unsqueeze(0) if v_i.dim() == 1 else v_i
-        v_j = v_j.unsqueeze(0) if v_j.dim() == 1 else v_j
+    #     # Ensure 2D tensor inputs [1, hidden_size]
+    #     v_i = v_i.unsqueeze(0) if v_i.dim() == 1 else v_i
+    #     v_j = v_j.unsqueeze(0) if v_j.dim() == 1 else v_j
         
-        # Compute Q matrix
-        Q_ij = torch.eye(v_i.size(-1), device=device, dtype=dtype) + alpha * D_ij
+    #     # Compute Q matrix
+    #     Q_ij = torch.eye(v_i.size(-1), device=device, dtype=dtype) + alpha * D_ij
         
-        # Calculate difference vector
-        diff = v_i - v_j
+    #     # Calculate difference vector
+    #     diff = v_i - v_j
 
-        if diff.dtype != Q_ij.dtype:
-            # Ensure both tensors are of the same type
-            diff = diff.to(torch.float32)
-            Q_ij = Q_ij.to(torch.float32)
+    #     if diff.dtype != Q_ij.dtype:
+    #         # Ensure both tensors are of the same type
+    #         diff = diff.to(torch.float32)
+    #         Q_ij = Q_ij.to(torch.float32)
         
-        # Matrix operations
-        product = torch.matmul(diff, torch.matmul(Q_ij, diff.T))  # [1,1]
+    #     # Matrix operations
+    #     product = torch.matmul(diff, torch.matmul(Q_ij, diff.T))  # [1,1]
         
-        # Safe square root
-        return torch.sqrt(product.clamp(min=1e-9)).item()
+    #     # Safe square root
+    #     return torch.sqrt(product.clamp(min=1e-9)).item()
 
     def get_pos_tags_spacy(self, sentence):
         """
@@ -135,7 +131,6 @@ class CCCalculator:
         
         with torch.no_grad():
             outputs = self.model(**inputs, 
-            max_new_tokens=50,  # 缩短生成长度,
             output_hidden_states=True)
         
         # Extract embeddings and tokens

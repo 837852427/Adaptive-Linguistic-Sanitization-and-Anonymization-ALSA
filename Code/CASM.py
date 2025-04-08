@@ -1,10 +1,11 @@
 import numpy as np
-from sklearn.cluster import KMeans
 import sys
 import nltk
 from nltk.corpus import wordnet as wn
 import random
-from transformers import pipeline
+import torch
+from transformers import AutoTokenizer
+
 
 # Download the WordNet corpus
 # nltk.download('wordnet')
@@ -14,14 +15,26 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class CASMCalculator:
-    def __init__(self, k=8, llm_model="gpt2"):
+    def __init__(self, k=8, llm_model=None):
         """
         Initialize CASM calculator
         :param k: Number of clusters for k-means
         """
         self.k = k
+        # 如果外部传入已加载的 LLM (HF AutoModelForCausalLM)，就复用；否则懒加载
+        if llm_model is None:
+            raise ValueError("llm_model 不能为 None，需传入已加载好的 LLM 实例")
         self.llm_model = llm_model
-        self.llm = pipeline("text-generation", model=llm_model)
+        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model.name_or_path)
+        self.llm_model.eval().requires_grad_(False)
+
+        # 统一生成参数
+        self.gen_kwargs = dict(
+            max_new_tokens=8,
+            do_sample=True,
+            temperature=0.9,
+            pad_token_id=self.llm_tokenizer.eos_token_id,
+        )
 
     def calculate(self, word_metrics):
         """
@@ -55,19 +68,15 @@ class CASMCalculator:
     def action_encrypt(self, words):
         """ Word Replacement"""
         def get_diff_word(word):
-            prompt = f"Give a different English word than '{word}': "
+            prompt = f"Give a different English word than '{word}':"
             try:
-                response = self.llm(
-                    prompt,
-                    temperature=0.9,  # 提高随机性
-                    max_new_tokens=8
-                ).strip().lower()
-                
-                # 基础清洗：取第一个单词
-                result = response.split()[0] if response else word
+                input_ids = self.llm_tokenizer(prompt, return_tensors="pt").input_ids.to(self.llm_model.device)
+                with torch.cuda.amp.autocast(dtype=torch.float16):
+                    output = self.llm_model.generate(input_ids, **self.gen_kwargs)
+                text = self.llm_tokenizer.decode(output[0], skip_special_tokens=True)
+                result = text.split()[-1].lower() if text else word
                 return result if result != word else f"{word}_alt"
-                
-            except:
+            except Exception:
                 return f"{word}_alt"
 
         return {(word, sentence): get_diff_word(word) for (word, sentence) in words}
@@ -91,9 +100,26 @@ class CASMCalculator:
             word_vectors.append([plrs, ciis, trs])
 
         # Perform k-means clustering
-        kmeans = KMeans(n_clusters=self.k, random_state=42)
-        clusters = kmeans.fit_predict(word_vectors)
-        centroids = kmeans.cluster_centers_
+        vec = torch.tensor([v for v in word_metrics.values()],
+                           device="cuda", dtype=torch.float32)          # [N,3]
+
+        # 初始化中心 = 前 k 个样本；若词数 < k，重复取
+        if vec.size(0) < self.k:
+            repeat = self.k - vec.size(0)
+            vec_init = torch.cat([vec, vec[:repeat]], dim=0)
+        else:
+            vec_init = vec[: self.k].clone()
+
+        centroids = vec_init                                                    # [k,3]
+        for _ in range(10):                # 10 次迭代足够收敛
+            dist = torch.cdist(vec, centroids)          # [N,k]
+            clusters = dist.argmin(dim=1)               # [N]
+            for cid in range(self.k):
+                mask = clusters == cid
+                if mask.any():
+                    centroids[cid] = vec[mask].mean(dim=0)
+        centroids = centroids.cpu().numpy()
+        clusters  = clusters.cpu().numpy()
 
         if __name__ == "__main__":
             print(f'clusters: {clusters}\n\ncentroids: {centroids}\n')
@@ -130,7 +156,7 @@ class CASMCalculator:
                 print(f"Centroid: {centroid}, Metrics: {word_metrics[word]}")
                 sys.exit(1)
 
-        print(f'Retain: {Retain_set}\nReplace: {Replace_set}\nEncrypt: {Encrypt_set}\nDelete: {Delte_set}\n')
+        # print(f'Retain: {Retain_set}\nReplace: {Replace_set}\nEncrypt: {Encrypt_set}\nDelete: {Delte_set}\n')
 
         return Retain_set, Replace_set, Encrypt_set, Delte_set
     
